@@ -9,23 +9,18 @@ def delete_existing_parts_and_materials():
     if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
         
-    # 1. オブジェクトの削除
     for obj_name in target_objects:
         if obj_name in bpy.data.objects:
             obj = bpy.data.objects[obj_name]
             bpy.data.objects.remove(obj, do_unlink=True)
-            print(f"🗑️ 古いオブジェクトを削除: {obj_name}")
             
-    # 2. 【最重要】古いマテリアルデータの完全削除（これでキャッシュを壊す）
     for mat_name in target_materials:
         if mat_name in bpy.data.materials:
             mat = bpy.data.materials[mat_name]
             bpy.data.materials.remove(mat, do_unlink=True)
-            print(f"🗑️ 古いマテリアルキャッシュを破棄: {mat_name}")
 
 def create_material(name):
     """完全にクリーンなマテリアルを新規作成してノードを接続する"""
-    # 毎回確実に新規作成する
     mat = bpy.data.materials.new(name=name)
     mat.use_nodes = True
     
@@ -33,17 +28,14 @@ def create_material(name):
     links = mat.node_tree.links
     nodes.clear()
     
-    # プリンシプルBSDFと出力ノードを作成
     node_principled = nodes.new(type='ShaderNodeBsdfPrincipled')
     node_output = nodes.new(type='ShaderNodeOutputMaterial')
     
     node_principled.location = (0, 0)
     node_output.location = (300, 0)
     
-    # ノード同士を確実に接続
     links.new(node_principled.outputs['BSDF'], node_output.inputs['Surface'])
     
-    # 色の定義
     if name == "Red":
         color = (0.8, 0.05, 0.05, 1.0)
     elif name == "Black":
@@ -55,7 +47,6 @@ def create_material(name):
     elif name == "Yellow":
         color = (0.8, 0.7, 0.05, 1.0)
         
-    # 接続したノードのBase Colorに値を代入
     node_principled.inputs['Base Color'].default_value = color
     mat.diffuse_color = color
         
@@ -85,23 +76,26 @@ def build_fire_extinguisher():
     head = bpy.context.active_object
     head.name = "Extinguisher_Head"
 
-    # 取手/レバーの簡易表現
+    # 取手/レバーの簡易表現 (レバーはYプラス方向に伸びている)
     bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0, 0.2, 1.85))
     lever = bpy.context.active_object
     lever.name = "Lever"
     lever.scale = (0.05, 0.4, 0.02)
 
-    # ホース部分 (ゴム：黒)
-    bpy.ops.mesh.primitive_cylinder_add(radius=0.04, depth=1.2, location=(0.2, 0.2, 1.1))
+    # 【位置修正】ホース部分 (ゴム：黒)
+    # レバー（Yプラス）の真反対にするため、Yマイナス方向（0, -0.43, 1.1）に配置
+    bpy.ops.mesh.primitive_cylinder_add(radius=0.03, depth=1.0, location=(0, -0.43, 1.1))
     hose = bpy.context.active_object
     hose.name = "Hose"
-    hose.rotation_euler = (math.radians(15), 0, math.radians(-45))
+    # 手前側に綺麗に垂れ下がるよう、角度を調整
+    hose.rotation_euler = (math.radians(-2), 0, 0)
 
-    # 圧力ゲージ (メーター：黄)
-    bpy.ops.mesh.primitive_cylinder_add(radius=0.08, depth=0.05, location=(0, -0.18, 1.75))
+    # 【位置修正】圧力ゲージ (メーター：黄)
+    # ホースが手前に来たので、メーターは横（Xプラス方向）に配置を変更
+    bpy.ops.mesh.primitive_cylinder_add(radius=0.08, depth=0.05, location=(0.18, 0, 1.75))
     gauge = bpy.context.active_object
     gauge.name = "Pressure_Gauge"
-    gauge.rotation_euler = (math.radians(90), 0, 0)
+    gauge.rotation_euler = (0, math.radians(90), 0)
 
     # 4. 新しく作ったマテリアルを割り当て
     tank.data.materials.append(mat_red)
@@ -121,7 +115,7 @@ def build_fire_extinguisher():
                 if space.type == 'VIEW_3D':
                     space.shading.type = 'MATERIAL'
     
-    print("🚒 キャッシュを完全に破棄し、新しい色付き消火器を生成しました！")
+    print("🚒 ホースをレバーの真反対に配置し、色付きで再生成しました！")
 
 # 関数の呼び出し
 build_fire_extinguisher()
