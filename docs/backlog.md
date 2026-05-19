@@ -16,3 +16,11 @@
 - [x] `docs/roblox_manual.md` に Blender→FBX エクスポート手順を追記・全体統合
 - [x] `palette_256.png` で4色パレットテクスチャを作成
 - [x] `fire_extingisher.blend` / `.fbx` を `assets/models/` にエクスポート
+
+## 2026/5/19のタスク
+- [x] `docs/roblox_manual.md` に Roblox Studio での Tool 化手順（Bセクション）を追加
+- [x] Blender スマートUV投影手順（A-2）をマニュアルに追加
+- [x] `auto_uv_palette_mapping.py` の実行手順・汎用性の補足（A-3）をマニュアルに追加
+- [x] マニュアル全体を A（Blender）→ B（Tool化）→ C（詳細仕様）のフェーズ構成に整理
+- [x] パレットUVの色指定ロジック（マテリアル名 → UV座標）を調査・整理
+- [x] スマートUV手順のスクリーンショットをマニュアルに掲載
