@@ -7,6 +7,7 @@ local GameConfig = {
 	FireMaxHealth = 100,
 	ExtinguisherDamage = 20,
 	ExtinguisherRange = 30,
+	PointsPerFire = 1,
 }
 
 return GameConfig

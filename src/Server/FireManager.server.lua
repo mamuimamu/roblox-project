@@ -88,7 +88,22 @@ local function isOriginNearPlayer(player, origin)
 	return (origin - root.Position).Magnitude <= maxOffset
 end
 
-local function applyExtinguishDamage(firePart)
+local function addExtinguishScore(player)
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if not leaderstats then
+		leaderstats = player:WaitForChild("leaderstats", 5)
+	end
+	if not leaderstats then
+		return
+	end
+
+	local fires = leaderstats:FindFirstChild("Fires")
+	if fires and fires:IsA("IntValue") then
+		fires.Value += GameConfig.PointsPerFire
+	end
+end
+
+local function applyExtinguishDamage(firePart, player)
 	local health = firePart:GetAttribute("FireHealth")
 	if typeof(health) ~= "number" then
 		firePart:SetAttribute("FireHealth", GameConfig.FireMaxHealth)
@@ -97,6 +112,7 @@ local function applyExtinguishDamage(firePart)
 
 	health -= GameConfig.ExtinguisherDamage
 	if health <= 0 then
+		addExtinguishScore(player)
 		firePart:Destroy()
 	else
 		firePart:SetAttribute("FireHealth", health)
@@ -135,7 +151,7 @@ local function handleExtinguishRequest(player, origin, direction)
 		return
 	end
 
-	applyExtinguishDamage(firePart)
+	applyExtinguishDamage(firePart, player)
 end
 
 ExtinguishEvent.OnServerEvent:Connect(handleExtinguishRequest)
