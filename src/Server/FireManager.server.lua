@@ -1,5 +1,5 @@
 --[[
-	火の生成・耐久管理・消火判定（Server / Script）
+	火の生成・耐久管理・消火判定、消防車の配備（Server / Script）
 	クライアントからの ExtinguishEvent を受け取り、サーバー側レイキャストで権威的に判定する。
 ]]
 
@@ -15,6 +15,11 @@ local INITIAL_FIRE_COUNT = 5
 local PERIODIC_FIRE_COUNT = 2
 local FIRE_SPAWN_INTERVAL = 45
 local FIRE_SPAWN_HALF_EXTENT = 40
+
+-- 消防車（低重心・幅広で安定、地面から少し浮かせて配置）
+local TRUCK_SIZE = Vector3.new(8, 3, 14)
+local TRUCK_SPAWN_POSITION = Vector3.new(0, 4, 20)
+local TRUCK_BUTTON_POSITION = Vector3.new(0, 0.25, 10)
 
 local function getOrCreateExtinguishEvent()
 	local existing = ReplicatedStorage:FindFirstChild("ExtinguishEvent")
@@ -155,6 +160,88 @@ local function handleExtinguishRequest(player, origin, direction)
 end
 
 ExtinguishEvent.OnServerEvent:Connect(handleExtinguishRequest)
+
+local function createRescueVehicle()
+	local truck = Instance.new("Part")
+	truck.Name = "RescueVehicle"
+	truck.Size = TRUCK_SIZE
+	truck.Position = TRUCK_SPAWN_POSITION
+	truck.BrickColor = BrickColor.new("Really red")
+	truck.Material = Enum.Material.SmoothPlastic
+	truck.Anchored = false
+	truck.CanCollide = true
+	truck.Parent = Workspace
+
+	local driverSeat = Instance.new("VehicleSeat")
+	driverSeat.Name = "DriverSeat"
+	driverSeat.Size = Vector3.new(2, 1, 2)
+	driverSeat.MaxSpeed = GameConfig.TruckMaxSpeed
+	driverSeat.TurnSpeed = GameConfig.TruckSteerSpeed
+	driverSeat.Anchored = false
+	driverSeat.CanCollide = true
+	driverSeat.CFrame = truck.CFrame * CFrame.new(0, (TRUCK_SIZE.Y + driverSeat.Size.Y) / 2, 1)
+	driverSeat.Parent = truck
+
+	local seatWeld = Instance.new("WeldConstraint")
+	seatWeld.Name = "SeatWeld"
+	seatWeld.Part0 = truck
+	seatWeld.Part1 = driverSeat
+	seatWeld.Parent = truck
+
+	local boardPrompt = Instance.new("ProximityPrompt")
+	boardPrompt.ObjectText = "消防車"
+	boardPrompt.ActionText = "運転する"
+	boardPrompt.HoldDuration = 0
+	boardPrompt.MaxActivationDistance = 12
+	boardPrompt.Parent = truck
+
+	boardPrompt.Triggered:Connect(function(player)
+		local character = player.Character
+		if not character then
+			return
+		end
+
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			driverSeat:Sit(humanoid)
+		end
+	end)
+
+	print("[Server] FireManager: 消防車を配備しました。")
+	return truck
+end
+
+local function createFireTruckSpawnButton()
+	local button = Instance.new("Part")
+	button.Name = "FireTruckButton"
+	button.Size = Vector3.new(4, 0.5, 4)
+	button.Position = TRUCK_BUTTON_POSITION
+	button.BrickColor = BrickColor.new("Bright red")
+	button.Anchored = true
+	button.Material = Enum.Material.Neon
+	button.CanCollide = true
+	button.Parent = Workspace
+
+	local isSpawning = false
+
+	button.Touched:Connect(function(otherPart)
+		if isSpawning or Workspace:FindFirstChild("RescueVehicle") then
+			return
+		end
+
+		local character = otherPart.Parent
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not humanoid then
+			return
+		end
+
+		isSpawning = true
+		createRescueVehicle()
+		isSpawning = false
+	end)
+end
+
+createFireTruckSpawnButton()
 
 spawnFires(INITIAL_FIRE_COUNT)
 

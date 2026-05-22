@@ -8,6 +8,8 @@ local GameConfig = {
 	ExtinguisherDamage = 20,
 	ExtinguisherRange = 30,
 	PointsPerFire = 1,
+	TruckMaxSpeed = 50,
+	TruckSteerSpeed = 1,
 }
 
 return GameConfig
