@@ -36,4 +36,4 @@
 - [x] `docs/cursor_Roblox_Rojo_manual.md` に環境構築手順を作成
 - [x] Rojo 連携を検証（Studio へコード同期の動作確認）
 - [x] `src/Server/init.server.lua` に救助ゲーム用の初期スポーンスクリプト（消防車ボタン）を追加
-- [x] `src/Shared/Config.lua` で共通設定モジュールの読み込みを確認
+- [x] `src/Shared/Config.lua` で共通設定モジュールの読み込みを確

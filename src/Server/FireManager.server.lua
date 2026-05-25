@@ -3,7 +3,6 @@
 	クライアントからの ExtinguishEvent を受け取り、サーバー側レイキャストで権威的に判定する。
 ]]
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
@@ -162,53 +161,51 @@ end
 ExtinguishEvent.OnServerEvent:Connect(handleExtinguishRequest)
 
 local function createRescueVehicle()
-	local truck = Instance.new("Part")
-	truck.Name = "RescueVehicle"
-	truck.Size = TRUCK_SIZE
-	truck.Position = TRUCK_SPAWN_POSITION
-	truck.BrickColor = BrickColor.new("Really red")
-	truck.Material = Enum.Material.SmoothPlastic
-	truck.Anchored = false
-	truck.CanCollide = true
-	truck.Parent = Workspace
+	local model = Instance.new("Model")
+	model.Name = "RescueVehicle"
 
-	local driverSeat = Instance.new("VehicleSeat")
-	driverSeat.Name = "DriverSeat"
-	driverSeat.Size = Vector3.new(2, 1, 2)
-	driverSeat.MaxSpeed = GameConfig.TruckMaxSpeed
-	driverSeat.TurnSpeed = GameConfig.TruckSteerSpeed
-	driverSeat.Anchored = false
-	driverSeat.CanCollide = true
-	driverSeat.CFrame = truck.CFrame * CFrame.new(0, (TRUCK_SIZE.Y + driverSeat.Size.Y) / 2, 1)
-	driverSeat.Parent = truck
-
-	local seatWeld = Instance.new("WeldConstraint")
-	seatWeld.Name = "SeatWeld"
-	seatWeld.Part0 = truck
-	seatWeld.Part1 = driverSeat
-	seatWeld.Parent = truck
+	-- Weld なし・単一 VehicleSeat を車体として使う最小構成
+	local seat = Instance.new("VehicleSeat")
+	seat.Name = "DriverSeat"
+	seat.Size = TRUCK_SIZE
+	seat.MaxSpeed = GameConfig.TruckMaxSpeed
+	seat.TurnSpeed = GameConfig.TruckSteerSpeed
+	seat.BrickColor = BrickColor.new("Really red")
+	seat.Material = Enum.Material.SmoothPlastic
+	seat.Anchored = false
+	seat.CanCollide = true
+	seat.CFrame = CFrame.new(TRUCK_SPAWN_POSITION)
+	-- 大きいと重くなりすぎて VehicleSeat の力で動けないため密度・摩擦を最小化
+	seat.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.1, 0, 1, 1)
+	seat.Parent = model
+	model.PrimaryPart = seat
 
 	local boardPrompt = Instance.new("ProximityPrompt")
 	boardPrompt.ObjectText = "消防車"
 	boardPrompt.ActionText = "運転する"
 	boardPrompt.HoldDuration = 0
 	boardPrompt.MaxActivationDistance = 12
-	boardPrompt.Parent = truck
+	boardPrompt.RequiresLineOfSight = false
+	boardPrompt.Parent = seat
+
+	seat:GetPropertyChangedSignal("Occupant"):Connect(function()
+		boardPrompt.Enabled = (seat.Occupant == nil)
+	end)
 
 	boardPrompt.Triggered:Connect(function(player)
+		if seat.Occupant ~= nil then return end
 		local character = player.Character
-		if not character then
-			return
-		end
-
+		if not character then return end
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if humanoid then
-			driverSeat:Sit(humanoid)
+			seat:Sit(humanoid)
 		end
 	end)
 
+	model.Parent = Workspace
+
 	print("[Server] FireManager: 消防車を配備しました。")
-	return truck
+	return model
 end
 
 local function createFireTruckSpawnButton()
