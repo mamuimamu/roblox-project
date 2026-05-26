@@ -1,15 +1,20 @@
 --[[
 	消火数スコアUI（Client / LocalScript）
 	leaderstats.Fires の変化を監視し、画面左下に表示する。
+	MissionCompleteEvent を受信したらミッション完了エフェクトを表示する。
 ]]
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+local screenGui
+
 local function createScoreUI()
-	local screenGui = Instance.new("ScreenGui")
+	screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "ScoreUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -63,7 +68,60 @@ local function bindScoreLabel(label)
 	fires:GetPropertyChangedSignal("Value"):Connect(updateDisplay)
 end
 
+local function showMissionComplete()
+	local overlay = Instance.new("Frame")
+	overlay.Name = "MissionCompleteOverlay"
+	overlay.Size = UDim2.new(1, 0, 1, 0)
+	overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	overlay.BackgroundTransparency = 1
+	overlay.ZIndex = 10
+	overlay.Parent = screenGui
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, 0, 0, 80)
+	title.Position = UDim2.new(0, 0, 0.4, 0)
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 64
+	title.TextColor3 = Color3.fromRGB(255, 215, 0)
+	title.TextStrokeTransparency = 0.4
+	title.Text = "ミッション完了！"
+	title.TextTransparency = 1
+	title.ZIndex = 11
+	title.Parent = overlay
+
+	local sub = Instance.new("TextLabel")
+	sub.Size = UDim2.new(1, 0, 0, 36)
+	sub.Position = UDim2.new(0, 0, 0.4, 88)
+	sub.BackgroundTransparency = 1
+	sub.Font = Enum.Font.Gotham
+	sub.TextSize = 28
+	sub.TextColor3 = Color3.fromRGB(255, 255, 255)
+	sub.Text = "全ての火を消し止めました！"
+	sub.TextTransparency = 1
+	sub.ZIndex = 11
+	sub.Parent = overlay
+
+	local tweenInfo = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(overlay, tweenInfo, { BackgroundTransparency = 0.55 }):Play()
+	TweenService:Create(title, tweenInfo, { TextTransparency = 0 }):Play()
+	TweenService:Create(sub, tweenInfo, { TextTransparency = 0 }):Play()
+
+	task.wait(2.5)
+
+	local fadeOut = TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	TweenService:Create(overlay, fadeOut, { BackgroundTransparency = 1 }):Play()
+	TweenService:Create(title, fadeOut, { TextTransparency = 1 }):Play()
+	local lastTween = TweenService:Create(sub, fadeOut, { TextTransparency = 1 })
+	lastTween:Play()
+	lastTween.Completed:Wait()
+	overlay:Destroy()
+end
+
 local scoreLabel = createScoreUI()
 bindScoreLabel(scoreLabel)
+
+local MissionCompleteEvent = ReplicatedStorage:WaitForChild("MissionCompleteEvent")
+MissionCompleteEvent.OnClientEvent:Connect(showMissionComplete)
 
 print("[Client] ScoreUIController: スコアUIを表示しました。")

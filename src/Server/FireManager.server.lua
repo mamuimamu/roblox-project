@@ -11,28 +11,31 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 
 -- 火の自動生成パラメータ（GameConfig には含めない運用値）
 local INITIAL_FIRE_COUNT = 5
-local PERIODIC_FIRE_COUNT = 2
-local FIRE_SPAWN_INTERVAL = 45
 local FIRE_SPAWN_HALF_EXTENT = 40
+
+-- ゲーム開始後に少なくとも1ウェーブがスポーンされたか
+local waveHasStarted = false
+-- 現在アクティブな FirePart の集合
+local activeFires = {}
 
 -- 消防車（低重心・幅広で安定、地面から少し浮かせて配置）
 local TRUCK_SIZE = Vector3.new(8, 3, 14)
 local TRUCK_SPAWN_POSITION = Vector3.new(0, 4, 20)
 local TRUCK_BUTTON_POSITION = Vector3.new(0, 0.25, 10)
 
-local function getOrCreateExtinguishEvent()
-	local existing = ReplicatedStorage:FindFirstChild("ExtinguishEvent")
+local function getOrCreateRemoteEvent(name)
+	local existing = ReplicatedStorage:FindFirstChild(name)
 	if existing and existing:IsA("RemoteEvent") then
 		return existing
 	end
-
 	local event = Instance.new("RemoteEvent")
-	event.Name = "ExtinguishEvent"
+	event.Name = name
 	event.Parent = ReplicatedStorage
 	return event
 end
 
-local ExtinguishEvent = getOrCreateExtinguishEvent()
+local ExtinguishEvent = getOrCreateRemoteEvent("ExtinguishEvent")
+local MissionCompleteEvent = getOrCreateRemoteEvent("MissionCompleteEvent")
 
 local function createFirePart(position)
 	local part = Instance.new("Part")
@@ -44,6 +47,15 @@ local function createFirePart(position)
 	part.Material = Enum.Material.Neon
 	part:SetAttribute("FireHealth", GameConfig.FireMaxHealth)
 	part.Parent = Workspace
+	activeFires[part] = true
+	waveHasStarted = true
+	-- WaterCannonHandler などで破壊された場合もここで捕捉する
+	part.Destroying:Connect(function()
+		activeFires[part] = nil
+		if waveHasStarted and next(activeFires) == nil then
+			MissionCompleteEvent:FireAllClients()
+		end
+	end)
 	return part
 end
 
@@ -117,7 +129,7 @@ local function applyExtinguishDamage(firePart, player)
 	health -= GameConfig.ExtinguisherDamage
 	if health <= 0 then
 		addExtinguishScore(player)
-		firePart:Destroy()
+		firePart:Destroy()  -- Destroying イベントが activeFires 除去と全滅チェックを担う
 	else
 		firePart:SetAttribute("FireHealth", health)
 	end
@@ -239,14 +251,6 @@ local function createFireTruckSpawnButton()
 end
 
 createFireTruckSpawnButton()
-
 spawnFires(INITIAL_FIRE_COUNT)
-
-task.spawn(function()
-	while true do
-		task.wait(FIRE_SPAWN_INTERVAL)
-		spawnFires(PERIODIC_FIRE_COUNT)
-	end
-end)
 
 print("[Server] FireManager: 消火システムを起動しました。")

@@ -14,14 +14,29 @@ function WsSend($obj) {
     $ws.SendAsync($seg, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [System.Threading.CancellationToken]::None).Wait(5000) | Out-Null
 }
 
+# CancellationToken を使わず pending task を再利用することで
+# タイムアウト時に WebSocket が Aborted 状態になるのを防ぐ
+$script:pendingRecvTask = $null
+$script:pendingRecvBuf  = $null
+
 function WsRecv([int]$ms = 15000) {
     $mem = New-Object System.IO.MemoryStream
     do {
-        $buf = [byte[]]::new(65536)
-        $seg = [ArraySegment[byte]]::new($buf)
-        $cts = New-Object System.Threading.CancellationTokenSource($ms)
-        $t = $ws.ReceiveAsync($seg, $cts.Token)
-        if (-not $t.Wait($ms)) { Write-Host "  [recv timeout]"; return $null }
+        if ($null -ne $script:pendingRecvTask) {
+            $t   = $script:pendingRecvTask
+            $buf = $script:pendingRecvBuf
+            $script:pendingRecvTask = $null
+            $script:pendingRecvBuf  = $null
+        } else {
+            $buf = [byte[]]::new(65536)
+            $seg = [ArraySegment[byte]]::new($buf)
+            $t   = $ws.ReceiveAsync($seg, [System.Threading.CancellationToken]::None)
+        }
+        if (-not $t.Wait($ms)) {
+            $script:pendingRecvTask = $t
+            $script:pendingRecvBuf  = $buf
+            Write-Host "  [recv timeout]"; return $null
+        }
         $result = $t.Result
         if ($result.MessageType -eq "Close") { return $null }
         if ($result.Count -gt 0) { $mem.Write($buf, 0, $result.Count) }
