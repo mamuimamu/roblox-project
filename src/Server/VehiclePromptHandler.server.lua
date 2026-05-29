@@ -44,8 +44,10 @@ local function setupRescueVehicle(vehicle)
 
 	local function updatePromptState()
 		prompt.Enabled = (seat.Occupant == nil)
+			and (vehicle:GetAttribute("VehiclePurchased") == true)
 	end
 	seat:GetPropertyChangedSignal("Occupant"):Connect(updatePromptState)
+	vehicle:GetAttributeChangedSignal("VehiclePurchased"):Connect(updatePromptState)
 	updatePromptState()
 
 	prompt.Triggered:Connect(function(player)

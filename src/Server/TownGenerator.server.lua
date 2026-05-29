@@ -87,7 +87,7 @@ end
 -- ── 街灯 ─────────────────────────────────────────────────────
 
 local LAMP_CLR     = Color3.fromRGB(65, 65, 65)
-local LAMP_SPACING = 28
+local LAMP_SPACING = 56
 local LAMP_OFFSET  = ROAD_WIDTH / 2 + SIDEW_WIDTH + 1.5
 
 local function makeStreetLamp(lx, lz)

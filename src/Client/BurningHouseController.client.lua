@@ -1,7 +1,7 @@
 --[[
 	BurningHouseController（Client / LocalScript）
 	IsBurning 属性を監視してパーティクルをローカル管理。
-	シグナル + ポーリング の二重チェックで確実に消去する。
+	Workspace 全体を監視するためクローンされた複数の火災建物に対応。
 ]]
 
 local Workspace = game:GetService("Workspace")
@@ -83,21 +83,16 @@ local function doExtinguish(part)
 	if not d then return end
 	partEffects[part] = nil
 
-	-- 追跡中のエフェクトを消去
 	if d.att and d.att.Parent then
 		d.att:Destroy()
 	end
 
-	-- パーツ内に存在する全エフェクト系オブジェクトを強制消去
-	-- （モデルに元から埋め込まれた Fire / Smoke / ParticleEmitter も対象）
 	for _, child in part:GetDescendants() do
 		if child:IsA("Fire") or child:IsA("Smoke") then
 			child.Enabled = false
-			print("[Client] 組み込みエフェクト無効化:", child.ClassName, child.Name)
 		elseif child:IsA("ParticleEmitter") then
 			child:Clear()
 			child.Enabled = false
-			print("[Client] ParticleEmitter消去:", child.Name)
 		elseif child:IsA("Attachment") and child.Name == "BurnAttachment" then
 			child:Destroy()
 		end
@@ -117,15 +112,12 @@ local function watchPart(part)
 	partEffects[part] = { att = att, fire = fire, smoke = smoke }
 	print("[Client] 火災エフェクト開始:", part.Name)
 
-	-- シグナルで即時検知
 	part:GetAttributeChangedSignal("IsBurning"):Connect(function()
-		print("[Client] IsBurning 変化:", part.Name, "->", part:GetAttribute("IsBurning"))
 		if part:GetAttribute("IsBurning") == false then
 			doExtinguish(part)
 		end
 	end)
 
-	-- BurnIntensity に合わせてパーティクルを調整
 	part:GetAttributeChangedSignal("BurnIntensity"):Connect(function()
 		local d = partEffects[part]
 		if not d then return end
@@ -134,6 +126,16 @@ local function watchPart(part)
 		d.smoke.Rate = math.floor(14 * i)
 		d.fire.Speed  = NumberRange.new(math.max(3 * i, 0.5), math.max(10 * i, 1))
 		d.smoke.Speed = NumberRange.new(math.max(10 * i, 1),  math.max(28 * i, 2))
+	end)
+end
+
+local function registerPart(desc)
+	if not desc:IsA("BasePart") then return end
+	watchPart(desc)
+	desc:GetAttributeChangedSignal("IsBurning"):Connect(function()
+		if desc:GetAttribute("IsBurning") == true and not partEffects[desc] then
+			watchPart(desc)
+		end
 	end)
 end
 
@@ -154,38 +156,13 @@ task.spawn(function()
 	end
 end)
 
--- ── BurningHouse 初期化 ─────────────────────────────────────
+-- ── Workspace 全体を監視（クローン対応） ────────────────────
 
-local burningHouse = Workspace:FindFirstChild("BurningHouse")
-	or Workspace:WaitForChild("BurningHouse", 60)
-
-if not burningHouse then
-	warn("[BurningHouseController] BurningHouse が見つかりません。")
-	return
-end
-
--- IsBurning が後から true に変わったパーツも検知
-local function onAttributeChanged(part)
-	if not part:IsA("BasePart") then return end
-	if part:GetAttribute("IsBurning") == true and not partEffects[part] then
-		watchPart(part)
-	end
-end
-
--- IsBurning 属性を持つ全パーツを監視（サーバーが1つだけ設定する想定）
-local function registerPart(desc)
-	if not desc:IsA("BasePart") then return end
-	watchPart(desc)
-	desc:GetAttributeChangedSignal("IsBurning"):Connect(function()
-		onAttributeChanged(desc)
-	end)
-end
-
-for _, desc in burningHouse:GetDescendants() do
+for _, desc in Workspace:GetDescendants() do
 	registerPart(desc)
 end
 
-burningHouse.DescendantAdded:Connect(function(desc)
+Workspace.DescendantAdded:Connect(function(desc)
 	task.wait()
 	registerPart(desc)
 end)
