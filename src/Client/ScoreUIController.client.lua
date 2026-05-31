@@ -18,6 +18,9 @@ local screenGui
 local waveTimerThread = nil
 local shopUI          = nil  -- ショップオーバーレイ（開いている間 non-nil）
 local pendingShopData = nil  -- ShopOpenEvent で受け取ったデータ
+local vehicleSpawned  = false
+local vehicleBtn      = nil
+local buffsHolder     = nil
 
 -- ── ユーティリティ ──────────────────────────────────────────
 
@@ -103,9 +106,9 @@ end
 local function createWaveUI()
 	local frame = Instance.new("Frame")
 	frame.Name                  = "WavePanel"
-	frame.AnchorPoint           = Vector2.new(0.5, 0)
-	frame.Position              = UDim2.new(0.5, 0, 0, 16)
-	frame.Size                  = UDim2.new(0, 180, 0, 90)
+	frame.AnchorPoint           = Vector2.new(0, 0)
+	frame.Position              = UDim2.new(0, 16, 0, 16)
+	frame.Size                  = UDim2.new(0, 160, 0, 80)
 	frame.BackgroundColor3      = Color3.fromRGB(0, 0, 0)
 	frame.BackgroundTransparency = 0.45
 	frame.BorderSizePixel       = 0
@@ -157,9 +160,48 @@ local function createWaveUI()
 	return waveLabel, timerLabel, fireLabel
 end
 
+-- ── 消防車ボタン ─────────────────────────────────────────────
+
+local function createVehicleBtn()
+	local btn = Instance.new("TextButton")
+	btn.Name             = "VehicleBtn"
+	btn.AnchorPoint      = Vector2.new(0, 1)
+	btn.Position         = UDim2.new(0, 16, 1, -72)
+	btn.Size             = UDim2.new(0, 148, 0, 46)
+	btn.BackgroundColor3 = Color3.fromRGB(40, 160, 70)
+	btn.BorderSizePixel  = 0
+	btn.Font             = Enum.Font.Legacy
+	btn.TextSize         = 20
+	btn.TextColor3       = Color3.fromRGB(255, 255, 255)
+	btn.Text             = "🚒 呼ぶ"
+	btn.Visible          = false
+	btn.ZIndex           = 5
+	btn.Parent           = screenGui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = btn
+
+	return btn
+end
+
+local function updateVehicleBtn(spawned, purchased)
+	if not vehicleBtn then return end
+	vehicleSpawned     = spawned
+	vehicleBtn.Visible = purchased == true
+	if spawned then
+		vehicleBtn.BackgroundColor3 = Color3.fromRGB(200, 100, 20)
+		vehicleBtn.Text             = "🚒 戻す"
+	else
+		vehicleBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 70)
+		vehicleBtn.Text             = "🚒 呼ぶ"
+	end
+end
+
 local scoreLabel = createScoreUI()
 local waveLabel, timerLabel, fireLabel = createWaveUI()
 bindScoreLabel(scoreLabel)
+vehicleBtn = createVehicleBtn()
 
 -- ── カウントダウン ───────────────────────────────────────────
 
@@ -385,6 +427,83 @@ local function showTimeOverDialog()
 	end)
 end
 
+-- ── ショップアイコン定義 ─────────────────────────────────────
+
+local SHOP_ITEM_ICONS = {
+	vehicle    = { icon = "🚒", sub = "解放",  color = Color3.fromRGB(210, 55,  30)  },
+	waterBoost = { icon = "🧯", sub = "×1.5",  color = Color3.fromRGB(30,  120, 210) },
+	timeExtend = { icon = "⏱", sub = "+60秒", color = Color3.fromRGB(170, 120, 20)  },
+	speedBoost = { icon = "🏃", sub = "×1.5",  color = Color3.fromRGB(50,  170, 40)  },
+}
+
+-- ── ウェーブ中バフ表示 ────────────────────────────────────────
+
+local BUFF_ORDER = { "waterBoost", "speedBoost" }
+local BUFF_DEF   = {
+	waterBoost = { label = "🧯消火×1.5", color = Color3.fromRGB(30,  120, 210) },
+	speedBoost = { label = "🏃速度×1.5", color = Color3.fromRGB(50,  170, 40)  },
+}
+
+local function createBuffsHolder()
+	local holder = Instance.new("Frame")
+	holder.Name                  = "BuffsHolder"
+	holder.AnchorPoint           = Vector2.new(0, 0)
+	holder.Position              = UDim2.new(0, 16, 0, 100)
+	holder.Size                  = UDim2.new(0, 160, 0, 26)
+	holder.BackgroundTransparency = 1
+	holder.Visible               = false
+	holder.Parent                = screenGui
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection         = Enum.FillDirection.Horizontal
+	layout.HorizontalAlignment   = Enum.HorizontalAlignment.Center
+	layout.VerticalAlignment     = Enum.VerticalAlignment.Center
+	layout.Padding               = UDim.new(0, 6)
+	layout.Parent                = holder
+
+	return holder
+end
+
+local function updateBuffsDisplay(powerups)
+	if not buffsHolder then return end
+	for _, child in buffsHolder:GetChildren() do
+		if not child:IsA("UIListLayout") then child:Destroy() end
+	end
+
+	local anyActive = false
+	for _, id in ipairs(BUFF_ORDER) do
+		if powerups and powerups[id] then
+			anyActive = true
+			local def   = BUFF_DEF[id]
+			local badge = Instance.new("Frame")
+			badge.Size                   = UDim2.new(0, 84, 0, 24)
+			badge.BackgroundColor3       = def.color
+			badge.BackgroundTransparency = 0.2
+			badge.BorderSizePixel        = 0
+			badge.Parent                 = buffsHolder
+
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UDim.new(0, 6)
+			corner.Parent       = badge
+
+			local lbl = Instance.new("TextLabel")
+			lbl.Size                 = UDim2.new(1, 0, 1, 0)
+			lbl.BackgroundTransparency = 1
+			lbl.Font                 = Enum.Font.Legacy
+			lbl.TextSize             = 13
+			lbl.TextColor3           = Color3.fromRGB(255, 255, 255)
+			lbl.TextXAlignment       = Enum.TextXAlignment.Center
+			lbl.TextYAlignment       = Enum.TextYAlignment.Center
+			lbl.Text                 = def.label
+			lbl.Parent               = badge
+		end
+	end
+
+	buffsHolder.Visible = anyActive
+end
+
+buffsHolder = createBuffsHolder()
+
 -- ── ショップUI ───────────────────────────────────────────────
 
 local function applyShopItemState(row, bought, buyerName)
@@ -420,7 +539,7 @@ local function showShopUI(data)
 	-- パネル本体
 	local panel = Instance.new("Frame")
 	panel.Name                  = "ShopPanel"
-	panel.Size                  = UDim2.new(0, 360, 0, 278)
+	panel.Size                  = UDim2.new(0, 360, 0, 400)
 	panel.AnchorPoint           = Vector2.new(0.5, 0.5)
 	panel.Position              = UDim2.new(0.5, 0, 0.5, 0)
 	panel.BackgroundColor3      = Color3.fromRGB(12, 14, 24)
@@ -506,26 +625,28 @@ local function showShopUI(data)
 	-- アイテムリスト
 	local itemList = Instance.new("Frame")
 	itemList.Name             = "ItemList"
-	itemList.Size             = UDim2.new(1, 0, 0, 198)
+	itemList.Size             = UDim2.new(1, 0, 0, 264)
 	itemList.Position         = UDim2.new(0, 0, 0, 80)
 	itemList.BackgroundTransparency = 1
 	itemList.ZIndex           = 17
 	itemList.Parent           = panel
 
 	local ShopBuyEvent  = ReplicatedStorage:WaitForChild("ShopBuyEvent")
+	local ShopEndEvent  = ReplicatedStorage:WaitForChild("ShopEndEvent")
 
 	local itemRows = {}  -- [itemId] = row Frame
 
 	for idx, item in ipairs(GameConfig.ShopItems) do
-		local row = Instance.new("Frame")
-		row.Name             = item.id
-		row.Size             = UDim2.new(1, 0, 0, 66)
-		row.Position         = UDim2.new(0, 0, 0, (idx - 1) * 66)
-		row.BackgroundTransparency = 1
-		row.ZIndex           = 17
-		row.Parent           = itemList
+		local iconData = SHOP_ITEM_ICONS[item.id] or { icon = "?", sub = "", color = Color3.fromRGB(80, 80, 80) }
 
-		-- 区切り（2行目以降）
+		local row = Instance.new("Frame")
+		row.Name                   = item.id
+		row.Size                   = UDim2.new(1, 0, 0, 66)
+		row.Position               = UDim2.new(0, 0, 0, (idx - 1) * 66)
+		row.BackgroundTransparency = 1
+		row.ZIndex                 = 17
+		row.Parent                 = itemList
+
 		if idx > 1 then
 			local sep = Instance.new("Frame")
 			sep.Size             = UDim2.new(1, -20, 0, 1)
@@ -536,55 +657,100 @@ local function showShopUI(data)
 			sep.Parent           = row
 		end
 
+		-- ── アイコン ──────────────────────────────────────────
+		local iconBg = Instance.new("Frame")
+		iconBg.Size                   = UDim2.new(0, 52, 0, 52)
+		iconBg.AnchorPoint            = Vector2.new(0, 0.5)
+		iconBg.Position               = UDim2.new(0, 8, 0.5, 0)
+		iconBg.BackgroundColor3       = iconData.color
+		iconBg.BackgroundTransparency = 0.25
+		iconBg.BorderSizePixel        = 0
+		iconBg.ZIndex                 = 18
+		iconBg.Parent                 = row
+
+		local iconBgCorner = Instance.new("UICorner")
+		iconBgCorner.CornerRadius = UDim.new(0, 10)
+		iconBgCorner.Parent       = iconBg
+
+		local iconEmoji = Instance.new("TextLabel")
+		iconEmoji.Size                 = UDim2.new(1, 0, 0, 34)
+		iconEmoji.Position             = UDim2.new(0, 0, 0, 1)
+		iconEmoji.BackgroundTransparency = 1
+		iconEmoji.Font                 = Enum.Font.Legacy
+		iconEmoji.TextSize             = 26
+		iconEmoji.TextColor3           = Color3.fromRGB(255, 255, 255)
+		iconEmoji.TextXAlignment       = Enum.TextXAlignment.Center
+		iconEmoji.TextYAlignment       = Enum.TextYAlignment.Center
+		iconEmoji.Text                 = iconData.icon
+		iconEmoji.ZIndex               = 19
+		iconEmoji.Parent               = iconBg
+
+		local iconSub = Instance.new("TextLabel")
+		iconSub.Size                   = UDim2.new(1, 0, 0, 18)
+		iconSub.AnchorPoint            = Vector2.new(0, 1)
+		iconSub.Position               = UDim2.new(0, 0, 1, -1)
+		iconSub.BackgroundTransparency = 1
+		iconSub.Font                   = Enum.Font.GothamBold
+		iconSub.TextSize               = 11
+		iconSub.TextColor3             = Color3.fromRGB(255, 255, 220)
+		iconSub.TextXAlignment         = Enum.TextXAlignment.Center
+		iconSub.TextYAlignment         = Enum.TextYAlignment.Center
+		iconSub.Text                   = iconData.sub
+		iconSub.ZIndex                 = 19
+		iconSub.Parent                 = iconBg
+
+		-- ── テキスト ──────────────────────────────────────────
 		local nameLabel = Instance.new("TextLabel")
-		nameLabel.Size                 = UDim2.new(0.62, 0, 0, 28)
-		nameLabel.Position             = UDim2.new(0, 14, 0, 10)
+		nameLabel.Size                   = UDim2.new(0, 170, 0, 26)
+		nameLabel.Position               = UDim2.new(0, 68, 0, 7)
 		nameLabel.BackgroundTransparency = 1
-		nameLabel.Font                 = Enum.Font.GothamBold
-		nameLabel.TextSize             = 16
-		nameLabel.TextColor3           = Color3.fromRGB(255, 255, 255)
-		nameLabel.TextXAlignment       = Enum.TextXAlignment.Left
-		nameLabel.TextYAlignment       = Enum.TextYAlignment.Center
-		nameLabel.Text                 = item.name
-		nameLabel.ZIndex               = 18
-		nameLabel.Parent               = row
+		nameLabel.Font                   = Enum.Font.GothamBold
+		nameLabel.TextSize               = 15
+		nameLabel.TextColor3             = Color3.fromRGB(255, 255, 255)
+		nameLabel.TextXAlignment         = Enum.TextXAlignment.Left
+		nameLabel.TextYAlignment         = Enum.TextYAlignment.Center
+		nameLabel.Text                   = item.name
+		nameLabel.ZIndex                 = 18
+		nameLabel.Parent                 = row
 
 		local descLabel = Instance.new("TextLabel")
-		descLabel.Size                 = UDim2.new(0.62, 0, 0, 22)
-		descLabel.Position             = UDim2.new(0, 14, 0, 36)
+		descLabel.Size                   = UDim2.new(0, 170, 0, 20)
+		descLabel.Position               = UDim2.new(0, 68, 0, 35)
 		descLabel.BackgroundTransparency = 1
-		descLabel.Font                 = Enum.Font.Gotham
-		descLabel.TextSize             = 13
-		descLabel.TextColor3           = Color3.fromRGB(160, 160, 180)
-		descLabel.TextXAlignment       = Enum.TextXAlignment.Left
-		descLabel.TextYAlignment       = Enum.TextYAlignment.Center
-		descLabel.Text                 = item.desc
-		descLabel.ZIndex               = 18
-		descLabel.Parent               = row
+		descLabel.Font                   = Enum.Font.Gotham
+		descLabel.TextSize               = 12
+		descLabel.TextColor3             = Color3.fromRGB(160, 160, 180)
+		descLabel.TextXAlignment         = Enum.TextXAlignment.Left
+		descLabel.TextYAlignment         = Enum.TextYAlignment.Center
+		descLabel.Text                   = item.desc
+		descLabel.ZIndex                 = 18
+		descLabel.Parent                 = row
 
+		-- ── 価格・購入ボタン ──────────────────────────────────
 		local priceLabel = Instance.new("TextLabel")
-		priceLabel.Name                 = "PriceLabel"
-		priceLabel.Size                 = UDim2.new(0.25, 0, 0, 24)
-		priceLabel.Position             = UDim2.new(0.62, 0, 0, 10)
+		priceLabel.Name                   = "PriceLabel"
+		priceLabel.Size                   = UDim2.new(0, 82, 0, 20)
+		priceLabel.AnchorPoint            = Vector2.new(1, 0)
+		priceLabel.Position               = UDim2.new(1, -8, 0, 6)
 		priceLabel.BackgroundTransparency = 1
-		priceLabel.Font                 = Enum.Font.GothamBold
-		priceLabel.TextSize             = 14
-		priceLabel.TextColor3           = Color3.fromRGB(255, 220, 60)
-		priceLabel.TextXAlignment       = Enum.TextXAlignment.Center
-		priceLabel.TextYAlignment       = Enum.TextYAlignment.Center
-		priceLabel.Text                 = item.price .. " pt"
-		priceLabel.ZIndex               = 18
-		priceLabel.Parent               = row
+		priceLabel.Font                   = Enum.Font.GothamBold
+		priceLabel.TextSize               = 14
+		priceLabel.TextColor3             = Color3.fromRGB(255, 220, 60)
+		priceLabel.TextXAlignment         = Enum.TextXAlignment.Right
+		priceLabel.TextYAlignment         = Enum.TextYAlignment.Center
+		priceLabel.Text                   = item.price .. " pt"
+		priceLabel.ZIndex                 = 18
+		priceLabel.Parent                 = row
 
 		local buyBtn = Instance.new("TextButton")
 		buyBtn.Name             = "BuyBtn"
-		buyBtn.Size             = UDim2.new(0, 80, 0, 36)
-		buyBtn.AnchorPoint      = Vector2.new(1, 0.5)
-		buyBtn.Position         = UDim2.new(1, -10, 0.5, 0)
+		buyBtn.Size             = UDim2.new(0, 82, 0, 32)
+		buyBtn.AnchorPoint      = Vector2.new(1, 1)
+		buyBtn.Position         = UDim2.new(1, -8, 1, -6)
 		buyBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 70)
 		buyBtn.BorderSizePixel  = 0
 		buyBtn.Font             = Enum.Font.GothamBold
-		buyBtn.TextSize         = 15
+		buyBtn.TextSize         = 14
 		buyBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
 		buyBtn.Text             = "購入"
 		buyBtn.ZIndex           = 18
@@ -592,7 +758,7 @@ local function showShopUI(data)
 
 		local bc = Instance.new("UICorner")
 		bc.CornerRadius = UDim.new(0, 8)
-		bc.Parent = buyBtn
+		bc.Parent       = buyBtn
 
 		-- 初期状態適用
 		local bought, buyerNm
@@ -613,6 +779,31 @@ local function showShopUI(data)
 
 		itemRows[item.id] = row
 	end
+
+	-- 買い物終了ボタン
+	local endDivider = Instance.new("Frame")
+	endDivider.Size             = UDim2.new(1, -20, 0, 1)
+	endDivider.Position         = UDim2.new(0, 10, 0, 350)
+	endDivider.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+	endDivider.BorderSizePixel  = 0
+	endDivider.ZIndex           = 17
+	endDivider.Parent           = panel
+
+	local endBtn = Instance.new("TextButton")
+	endBtn.Size             = UDim2.new(1, -20, 0, 40)
+	endBtn.Position         = UDim2.new(0, 10, 0, 356)
+	endBtn.BackgroundColor3 = Color3.fromRGB(60, 140, 220)
+	endBtn.BorderSizePixel  = 0
+	endBtn.Font             = Enum.Font.GothamBold
+	endBtn.TextSize         = 16
+	endBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
+	endBtn.Text             = "買い物終了 →"
+	endBtn.ZIndex           = 18
+	endBtn.Parent           = panel
+
+	local endBtnCorner = Instance.new("UICorner")
+	endBtnCorner.CornerRadius = UDim.new(0, 8)
+	endBtnCorner.Parent       = endBtn
 
 	-- ショップ更新関数（ShopUpdateEvent から呼ばれる）
 	local function onShopUpdate(powerups, buyers, vPurchased)
@@ -637,6 +828,18 @@ local function showShopUI(data)
 		onShopUpdate(powerups, buyers, vPurchased)
 	end)
 
+	local function finishShopping()
+		if shopUI ~= overlay then return end
+		updateConn:Disconnect()
+		overlay:Destroy()
+		shopUI = nil
+	end
+
+	endBtn.MouseButton1Click:Connect(function()
+		ShopEndEvent:FireServer()
+		finishShopping()
+	end)
+
 	-- カウントダウン
 	local remaining = data.duration
 	task.spawn(function()
@@ -645,11 +848,7 @@ local function showShopUI(data)
 			task.wait(1)
 			remaining -= 1
 		end
-		if shopUI == overlay then
-			updateConn:Disconnect()
-			overlay:Destroy()
-			shopUI = nil
-		end
+		finishShopping()
 	end)
 end
 
@@ -673,6 +872,12 @@ task.spawn(function()
 		fireLabel.TextColor3 = Color3.fromRGB(255, 160, 80)
 		startCountdown(timeRemaining)
 	end
+
+	local GetVehicleState = ReplicatedStorage:WaitForChild("GetVehicleState", 10)
+	if GetVehicleState then
+		local spawned, purchased = GetVehicleState:InvokeServer()
+		updateVehicleBtn(spawned, purchased)
+	end
 end)
 
 -- ── イベント接続 ────────────────────────────────────────────
@@ -683,6 +888,7 @@ MissionCompleteEvent.OnClientEvent:Connect(function()
 	timerLabel.Text       = "CLEAR!"
 	timerLabel.TextColor3 = Color3.fromRGB(100, 230, 100)
 	fireLabel.Text        = ""
+	updateBuffsDisplay({})
 	task.spawn(function()
 		showMissionComplete()
 		if pendingShopData then
@@ -704,19 +910,21 @@ ShopOpenEvent.OnClientEvent:Connect(function(duration, powerups, buyers, vPurcha
 end)
 
 local WaveStartEvent = ReplicatedStorage:WaitForChild("WaveStartEvent")
-WaveStartEvent.OnClientEvent:Connect(function(wave, fireCount, timeLimit)
+WaveStartEvent.OnClientEvent:Connect(function(wave, fireCount, timeLimit, activePowerups)
 	closeShop()
 	waveLabel.Text        = "Wave " .. wave
 	timerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	fireLabel.Text        = "火災 " .. fireCount .. " 件"
 	fireLabel.TextColor3  = Color3.fromRGB(255, 160, 80)
 	startCountdown(timeLimit or WAVE_TIME_LIMIT)
+	updateBuffsDisplay(activePowerups or {})
 	task.spawn(showWaveStart, wave, fireCount)
 end)
 
 local TimeUpEvent = ReplicatedStorage:WaitForChild("TimeUpEvent")
 TimeUpEvent.OnClientEvent:Connect(function()
 	closeShop()
+	updateBuffsDisplay({})
 	task.spawn(showTimeOverDialog)
 end)
 
@@ -728,6 +936,17 @@ FireExtinguishedEvent.OnClientEvent:Connect(function(remaining)
 			and Color3.fromRGB(255, 100, 50)
 			or  Color3.fromRGB(255, 160, 80)
 	end
+end)
+
+local VehicleSpawnEvent = ReplicatedStorage:WaitForChild("VehicleSpawnEvent")
+local VehicleStateEvent = ReplicatedStorage:WaitForChild("VehicleStateEvent")
+
+vehicleBtn.MouseButton1Click:Connect(function()
+	VehicleSpawnEvent:FireServer(not vehicleSpawned)
+end)
+
+VehicleStateEvent.OnClientEvent:Connect(function(spawned, purchased)
+	updateVehicleBtn(spawned, purchased)
 end)
 
 print("[Client] ScoreUIController: スコアUIを表示しました。")

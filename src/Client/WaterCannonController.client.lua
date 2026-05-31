@@ -17,25 +17,16 @@ local mouse  = player:GetMouse()
 local WaterCannonFire   = ReplicatedStorage:WaitForChild("WaterCannonFire")
 local WaterCannonEffect = ReplicatedStorage:WaitForChild("WaterCannonEffect")
 
--- RescueVehicle の VehicleSeat を取得（キャッシュ付き）
-local cachedSeat = nil
-local function getRescueSeat()
-	if cachedSeat and cachedSeat.Parent then return cachedSeat end
-	local rv = Workspace:FindFirstChild("RescueVehicle")
-	if not rv then return nil end
-	local chassis = rv:FindFirstChild("Chassis")
-	cachedSeat = chassis and chassis:FindFirstChild("VehicleSeat")
-	return cachedSeat
-end
-
 local function isInRescueSeat()
 	local char = player.Character
 	if not char then return false end
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	if not hum then return false end
-	local seated = hum.SeatPart
-	if not seated or not seated:IsA("VehicleSeat") then return false end
-	return seated == getRescueSeat()
+	local seatPart = hum.SeatPart
+	if not seatPart or not seatPart:IsA("VehicleSeat") then return false end
+	local chassis = seatPart.Parent
+	if not chassis or chassis.Name ~= "Chassis" then return false end
+	return chassis.Parent ~= nil and chassis.Parent.Name == "RescueVehicle"
 end
 
 local function getMuzzleEmitter()

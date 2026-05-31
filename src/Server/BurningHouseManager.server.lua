@@ -43,6 +43,8 @@ local rescueVehicle    = nil  -- Workspace の RescueVehicle 参照
 -- 現ウェーブのアクティブパワーアップ
 local activePowerups = { waterBoost = false, speedBoost = false }
 
+local shopDelayThread = nil  -- ショップ待機スレッド（買い物終了で cancel）
+
 local burningData  = {}
 local activeHouses = {}
 
@@ -70,6 +72,7 @@ local FireExtinguishedEvent = getOrCreateRemoteEvent("FireExtinguishedEvent")
 local ShopOpenEvent         = getOrCreateRemoteEvent("ShopOpenEvent")
 local ShopUpdateEvent       = getOrCreateRemoteEvent("ShopUpdateEvent")
 local ShopBuyEvent          = getOrCreateRemoteEvent("ShopBuyEvent")
+local ShopEndEvent          = getOrCreateRemoteEvent("ShopEndEvent")
 
 local GetWaveState = ReplicatedStorage:FindFirstChild("GetWaveState")
 if not (GetWaveState and GetWaveState:IsA("RemoteFunction")) then
@@ -266,7 +269,7 @@ local function spawnWaveHouses(count)
 			if root then table.insert(playerPositions, root.Position) end
 		end
 	end
-	local vehicleRef = rescueVehicle or Workspace:FindFirstChild("RescueVehicle")
+	local vehicleRef = rescueVehicle and rescueVehicle.Parent == Workspace and rescueVehicle or nil
 	if vehicleRef then table.insert(playerPositions, vehicleRef:GetPivot().Position) end
 
 	local usedPositions = {}
@@ -332,7 +335,8 @@ local function extinguishHit(part, amount, player)
 			waveToken += 1
 			MissionCompleteEvent:FireAllClients(currentWave)
 			ShopOpenEvent:FireAllClients(GameConfig.ShopDuration, nextWavePowerups, powerupBuyers, vehiclePurchased)
-			task.delay(WAVE_START_DELAY, function()
+			shopDelayThread = task.delay(WAVE_START_DELAY, function()
+				shopDelayThread = nil
 				isWaveTransitioning = false
 				startNextWave()
 			end)
@@ -389,9 +393,9 @@ startNextWave = function()
 		currentWaveTimeLimit = WAVE_TIME_LIMIT + 60
 	end
 
-	-- パワーアップをアクティブに設定（clearActiveHouses の前）
+	-- clearActiveHouses でリセットされるため spawnWaveHouses の後に適用
 	local applySpeed = nextWavePowerups.speedBoost
-	activePowerups.waterBoost = nextWavePowerups.waterBoost
+	local applyWater = nextWavePowerups.waterBoost
 
 	-- ショップ状態をリセット（次のウェーブ間用）
 	nextWavePowerups = { waterBoost = false, timeExtend = false, speedBoost = false }
@@ -399,7 +403,8 @@ startNextWave = function()
 
 	spawnWaveHouses(fireCount)
 
-	-- スピードブースト適用（spawnWaveHouses の後、旧ブーストリセット後に適用）
+	-- パワーアップ適用（clearActiveHouses のリセット後）
+	activePowerups.waterBoost = applyWater
 	if applySpeed then
 		activePowerups.speedBoost = true
 		for _, plr in Players:GetPlayers() do
@@ -411,7 +416,7 @@ startNextWave = function()
 		end
 	end
 
-	WaveStartEvent:FireAllClients(currentWave, fireCount, currentWaveTimeLimit)
+	WaveStartEvent:FireAllClients(currentWave, fireCount, currentWaveTimeLimit, activePowerups)
 	beginWaveTimer(currentWaveTimeLimit)
 	print(("[BurningHouseManager] Wave %d 開始 (%d 件, %ds)"):format(currentWave, fireCount, currentWaveTimeLimit))
 end
@@ -440,9 +445,19 @@ RetryWaveEvent.OnServerEvent:Connect(function()
 	isWaveTransitioning = false
 	local fireCount = math.min(currentWave, MAX_FIRES)
 	spawnWaveHouses(fireCount)
-	WaveStartEvent:FireAllClients(currentWave, fireCount, currentWaveTimeLimit)
+	WaveStartEvent:FireAllClients(currentWave, fireCount, currentWaveTimeLimit, activePowerups)
 	beginWaveTimer(currentWaveTimeLimit)
 	print("[BurningHouseManager] Wave " .. currentWave .. " リトライ")
+end)
+
+ShopEndEvent.OnServerEvent:Connect(function()
+	if not isWaveTransitioning then return end
+	if shopDelayThread then
+		task.cancel(shopDelayThread)
+		shopDelayThread = nil
+	end
+	isWaveTransitioning = false
+	startNextWave()
 end)
 
 ShopBuyEvent.OnServerEvent:Connect(function(player, itemId)
@@ -494,13 +509,22 @@ templateHouse  = found
 originalPivotY = templateHouse:GetPivot().Y
 templateHouse.Parent = ServerStorage
 
-rescueVehicle = Workspace:FindFirstChild("RescueVehicle")
-	or Workspace:WaitForChild("RescueVehicle", 10)
+do
+	local deadline = tick() + 10
+	repeat
+		rescueVehicle = Workspace:FindFirstChild("RescueVehicle")
+			or ServerStorage:FindFirstChild("RescueVehicle")
+		if not rescueVehicle then task.wait(0.5) end
+	until rescueVehicle or tick() > deadline
+end
+if not rescueVehicle then
+	warn("[BurningHouseManager] RescueVehicle が見つかりません（スキップ）")
+end
 
 currentWave          = 1
 currentWaveTimeLimit = WAVE_TIME_LIMIT
 local initFireCount  = math.min(currentWave, MAX_FIRES)
 spawnWaveHouses(initFireCount)
-WaveStartEvent:FireAllClients(currentWave, initFireCount, currentWaveTimeLimit)
+WaveStartEvent:FireAllClients(currentWave, initFireCount, currentWaveTimeLimit, activePowerups)
 beginWaveTimer(currentWaveTimeLimit)
 print(("[BurningHouseManager] Wave 1 開始 (%d 件)"):format(initFireCount))
