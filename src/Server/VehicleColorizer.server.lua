@@ -2,9 +2,12 @@
 	VehicleColorizer（Server / Script）
 	起動時に RescueVehicle を消防車カラー（赤）に変更し、
 	警察デカールを非表示にする。
+	VehiclePromptHandler が先に動いて ServerStorage に格納する場合があるため、
+	両方のコンテナを検索する。
 ]]
 
-local Workspace = game:GetService("Workspace")
+local Workspace     = game:GetService("Workspace")
+local ServerStorage = game:GetService("ServerStorage")
 
 local FIRE_RED = Color3.fromRGB(210, 35, 30)
 
@@ -42,8 +45,19 @@ local function colorize(vehicle)
 	print("[VehicleColorizer] 消防車カラーに変更しました")
 end
 
+-- VehiclePromptHandler が先に動いて ServerStorage に格納する場合があるため両方を検索する
 local vehicle = Workspace:FindFirstChild("RescueVehicle")
-	or Workspace:WaitForChild("RescueVehicle", 10)
+	or ServerStorage:FindFirstChild("RescueVehicle")
+
+if not vehicle then
+	-- まだどちらにも存在しない場合は最大10秒待機
+	local deadline = tick() + 10
+	repeat
+		task.wait(0.2)
+		vehicle = Workspace:FindFirstChild("RescueVehicle")
+			or ServerStorage:FindFirstChild("RescueVehicle")
+	until vehicle or tick() > deadline
+end
 
 if vehicle then
 	colorize(vehicle)

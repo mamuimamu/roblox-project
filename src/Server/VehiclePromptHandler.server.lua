@@ -28,9 +28,10 @@ local function getOrCreate(name, cls)
 	return obj
 end
 
-local VehicleSpawnEvent = getOrCreate("VehicleSpawnEvent", "RemoteEvent")
-local VehicleStateEvent = getOrCreate("VehicleStateEvent", "RemoteEvent")
-local GetVehicleState   = getOrCreate("GetVehicleState",   "RemoteFunction")
+local VehicleSpawnEvent  = getOrCreate("VehicleSpawnEvent",  "RemoteEvent")
+local VehicleStateEvent  = getOrCreate("VehicleStateEvent",  "RemoteEvent")
+local BoardVehicleEvent  = getOrCreate("BoardVehicleEvent",  "RemoteEvent")
+local GetVehicleState    = getOrCreate("GetVehicleState",    "RemoteFunction")
 
 -- ── プロンプト状態更新 ────────────────────────────────────────
 
@@ -163,6 +164,22 @@ VehicleSpawnEvent.OnServerEvent:Connect(function(player, shouldSpawn)
 	else
 		despawnVehicle()
 	end
+end)
+
+-- モバイル「乗る」ボタンからの乗車リクエスト
+local BOARD_MAX_DIST = 18  -- 乗車可能距離（スタッズ）
+BoardVehicleEvent.OnServerEvent:Connect(function(player)
+	if not vehicleSpawned or not vehicle or not seat then return end
+	if vehicle:GetAttribute("VehiclePurchased") ~= true then return end
+	if seat.Occupant ~= nil then return end
+	local char = player.Character
+	if not char then return end
+	local root = char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	-- 距離チェック（不正防止）
+	if (root.Position - seat.Position).Magnitude > BOARD_MAX_DIST then return end
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if humanoid then seat:Sit(humanoid) end
 end)
 
 -- ── 初期化 ───────────────────────────────────────────────────

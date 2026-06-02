@@ -25,15 +25,29 @@ GetGameMode.OnServerInvoke = function()
 	return GameConfig.GameMode, GameConfig.MaxPlayers
 end
 
--- ── ソロモード: 定員超過をキック ────────────────────────────
+-- ── ソロモード: 定員超過を新規専用サーバーへテレポート ──────
+-- 単純なキックでは Roblox が同じサーバーへ再ルーティングし続け
+-- 「最初のプレイヤーが終わるまで入れない」状態になるため、
+-- TeleportService で別インスタンスへ送り出す。
 
 if GameConfig.GameMode == "solo" then
+	local TeleportService = game:GetService("TeleportService")
+
 	local function enforceLimit(newPlayer)
 		if #Players:GetPlayers() > GameConfig.MaxPlayers then
-			newPlayer:Kick(
-				"このサーバーはソロプレイ専用です。\n" ..
-				"マルチプレイは現在準備中です。"
-			)
+			task.spawn(function()
+				-- ShouldReserveServer=true で新規専用サーバーを自動確保してテレポート
+				local options = Instance.new("TeleportOptions")
+				options.ShouldReserveServer = true
+				local ok, err = pcall(function()
+					TeleportService:TeleportAsync(game.PlaceId, {newPlayer}, options)
+				end)
+				if not ok then
+					-- Studio 環境など TeleportService が使えない場合はキックにフォールバック
+					warn("[GameModeManager] テレポート失敗: " .. tostring(err))
+					newPlayer:Kick("新しいゲームサーバーを確保できませんでした。もう一度参加してください。")
+				end
+			end)
 		end
 	end
 	Players.PlayerAdded:Connect(enforceLimit)

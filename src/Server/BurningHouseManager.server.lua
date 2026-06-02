@@ -45,6 +45,9 @@ local activePowerups = { waterBoost = false, speedBoost = false }
 
 local shopDelayThread = nil  -- ショップ待機スレッド（買い物終了で cancel）
 
+-- 町の建物 AABB キャッシュ（スポーン位置の重複回避に使用）
+local townBuildings = {}
+
 local burningData  = {}
 local activeHouses = {}
 
@@ -187,17 +190,42 @@ end
 
 -- ── ランダム位置生成 ─────────────────────────────────────────
 
+-- 起動時に Town フォルダの建物 AABB を収集する
+local function collectTownBuildings()
+	local town = Workspace:WaitForChild("Town", 15)
+	if not town then
+		warn("[BurningHouseManager] Town フォルダが見つかりません。建物回避をスキップします。")
+		return
+	end
+	for _, obj in town:GetChildren() do
+		if obj.Name == "Building" and obj:IsA("BasePart") then
+			table.insert(townBuildings, {
+				cx = obj.Position.X,
+				cz = obj.Position.Z,
+				hx = obj.Size.X / 2,
+				hz = obj.Size.Z / 2,
+			})
+		end
+	end
+	print(("[BurningHouseManager] 町の建物 %d 件を回避リストに登録"):format(#townBuildings))
+end
+
+local BUILDING_MARGIN = 8  -- 町の建物外縁から離すバッファ（スタッズ）
+
 local function pickPosition(usedPositions, playerPositions)
-	for _ = 1, 30 do
+	for _ = 1, 50 do  -- 試行回数を増やして確実に空き地を探す
 		local x = math.random(-SPAWN_HALF_EXTENT, SPAWN_HALF_EXTENT)
 		local z = math.random(-SPAWN_HALF_EXTENT, SPAWN_HALF_EXTENT)
 		local candidate = Vector3.new(x, 0, z)
 		local ok = true
+
+		-- 既存の火事との距離チェック
 		for _, p in ipairs(usedPositions) do
 			if (candidate - Vector3.new(p.X, 0, p.Z)).Magnitude < MIN_HOUSE_DIST then
 				ok = false; break
 			end
 		end
+		-- プレイヤーとの距離チェック
 		if ok then
 			for _, p in ipairs(playerPositions) do
 				if (candidate - Vector3.new(p.X, 0, p.Z)).Magnitude < MIN_PLAYER_DIST then
@@ -205,8 +233,19 @@ local function pickPosition(usedPositions, playerPositions)
 				end
 			end
 		end
+		-- 町の建物との AABB 重複チェック（重なりを防ぐ）
+		if ok then
+			for _, b in ipairs(townBuildings) do
+				if math.abs(x - b.cx) < b.hx + BUILDING_MARGIN
+				and math.abs(z - b.cz) < b.hz + BUILDING_MARGIN then
+					ok = false; break
+				end
+			end
+		end
+
 		if ok then return x, z end
 	end
+	-- 50回試しても見つからない場合は建物チェックを省いてフォールバック
 	return math.random(-SPAWN_HALF_EXTENT, SPAWN_HALF_EXTENT),
 	       math.random(-SPAWN_HALF_EXTENT, SPAWN_HALF_EXTENT)
 end
@@ -368,7 +407,9 @@ local function burningPartsList()
 	return list
 end
 
-local function raycastExtinguish(origin, direction, range, amount, player)
+-- maxPlayerDist: プレイヤーのルートからヒット地点までの最大距離（スタッズ）
+-- 壁を無視するレイキャスト特性を補うため、ヒット後に距離を再チェックする
+local function raycastExtinguish(origin, direction, range, amount, player, maxPlayerDist)
 	local parts = burningPartsList()
 	if #parts == 0 then return end
 	local mult   = activePowerups.waterBoost and 1.5 or 1.0
@@ -377,6 +418,13 @@ local function raycastExtinguish(origin, direction, range, amount, player)
 	params.FilterDescendantsInstances = parts
 	local result = Workspace:Spherecast(origin, 4, direction * range, params)
 	if result and burningData[result.Instance] then
+		-- プレイヤーのルートパーツからヒット地点までの実距離チェック
+		if maxPlayerDist and player and player.Character then
+			local root = player.Character:FindFirstChild("HumanoidRootPart")
+			if root and (result.Position - root.Position).Magnitude > maxPlayerDist then
+				return
+			end
+		end
 		extinguishHit(result.Instance, amount * mult, player)
 	end
 end
@@ -431,13 +479,48 @@ ExtinguishEvent.OnServerEvent:Connect(function(player, origin, direction)
 	local root = char:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 	if (origin - root.Position).Magnitude > 28 then return end
-	raycastExtinguish(origin, direction.Unit, 32, EXTINGUISHER_AMOUNT, player)
+	-- 消火器: プレイヤーから35スタッズ以内の火にのみ有効
+	raycastExtinguish(origin, direction.Unit, 32, EXTINGUISHER_AMOUNT, player, 35)
 end)
 
 WaterCannonFire.OnServerEvent:Connect(function(player, camPos, direction)
 	if typeof(camPos) ~= "Vector3" or typeof(direction) ~= "Vector3" then return end
 	if direction.Magnitude < 1e-4 then return end
-	raycastExtinguish(camPos, direction.Unit, 210, WATER_CANNON_AMOUNT, player)
+
+	local CANNON_RANGE = 180
+	local char = player.Character
+	local rv   = Workspace:FindFirstChild("RescueVehicle")
+
+	-- Step1: 燃えているパーツを探す（壁は無視して火だけを対象にする）
+	local parts = burningPartsList()
+	if #parts == 0 then return end
+	local burnParams = RaycastParams.new()
+	burnParams.FilterType = Enum.RaycastFilterType.Include
+	burnParams.FilterDescendantsInstances = parts
+	local burnResult = Workspace:Spherecast(camPos, 5, direction.Unit * CANNON_RANGE, burnParams)
+	if not burnResult or not burningData[burnResult.Instance] then return end
+
+	-- 距離チェック
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if root and (burnResult.Position - root.Position).Magnitude > CANNON_RANGE then return end
+
+	-- Step2: 障害物チェック（プレイヤー・消防車・対象の燃えている家を除いてレイキャスト）
+	-- 他の建物が間にある場合はブロックする
+	local hitHouse = burnResult.Instance.Parent  -- BurningHouse_X
+	local excludeList = {}
+	if char    then table.insert(excludeList, char)    end
+	if rv      then table.insert(excludeList, rv)      end
+	if hitHouse then table.insert(excludeList, hitHouse) end
+
+	local toHit = burnResult.Position - camPos
+	local obsParams = RaycastParams.new()
+	obsParams.FilterType = Enum.RaycastFilterType.Exclude
+	obsParams.FilterDescendantsInstances = excludeList
+	local obstacle = Workspace:Raycast(camPos, toHit, obsParams)
+	if obstacle then return end  -- 他の建物が遮っている
+
+	local mult = activePowerups.waterBoost and 1.5 or 1.0
+	extinguishHit(burnResult.Instance, WATER_CANNON_AMOUNT * mult, player)
 end)
 
 RetryWaveEvent.OnServerEvent:Connect(function()
@@ -509,6 +592,9 @@ templateHouse  = found
 originalPivotY = templateHouse:GetPivot().Y
 templateHouse.Parent = ServerStorage
 
+-- 町の建物位置を収集（スポーン時の重複回避に使用）
+collectTownBuildings()
+
 do
 	local deadline = tick() + 10
 	repeat
@@ -519,6 +605,20 @@ do
 end
 if not rescueVehicle then
 	warn("[BurningHouseManager] RescueVehicle が見つかりません（スキップ）")
+end
+
+-- 最初のプレイヤーが参加してキャラクター生成されるまで待つ。
+-- これにより WaveStartEvent がプレイヤーに届き、Wave 1 のアニメーションが正しく表示される。
+-- （TeleportAsync で転送されてきたプレイヤーも含む）
+do
+	local firstPlayer = Players:GetPlayers()[1]
+	if not firstPlayer then
+		firstPlayer = Players.PlayerAdded:Wait()
+	end
+	if not firstPlayer.Character then
+		firstPlayer.CharacterAdded:Wait()
+	end
+	task.wait(0.5)  -- クライアントスクリプトの RemoteEvent 接続を待つバッファ
 end
 
 currentWave          = 1

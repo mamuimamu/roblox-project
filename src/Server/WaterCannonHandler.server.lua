@@ -8,13 +8,18 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace         = game:GetService("Workspace")
 
 
-local WaterCannonFire = Instance.new("RemoteEvent")
-WaterCannonFire.Name  = "WaterCannonFire"
-WaterCannonFire.Parent = ReplicatedStorage
+-- 既存のイベントを再利用し、重複作成を防ぐ
+local function getOrCreate(name)
+	local existing = ReplicatedStorage:FindFirstChild(name)
+	if existing and existing:IsA("RemoteEvent") then return existing end
+	local e = Instance.new("RemoteEvent")
+	e.Name   = name
+	e.Parent = ReplicatedStorage
+	return e
+end
 
-local WaterCannonEffect = Instance.new("RemoteEvent")
-WaterCannonEffect.Name  = "WaterCannonEffect"
-WaterCannonEffect.Parent = ReplicatedStorage
+local WaterCannonFire   = getOrCreate("WaterCannonFire")
+local WaterCannonEffect = getOrCreate("WaterCannonEffect")
 
 local function getRescueVehicle()
 	return Workspace:FindFirstChild("RescueVehicle")
