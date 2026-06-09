@@ -149,7 +149,13 @@ function Invoke-RunCode([string]$lua) {
     WsSend @{
         type    = "json_rpc"; jsonrpc = "2.0"; id = "$($script:msgId)"
         method  = "tools/call"
-        params  = @{ name = "execute_luau"; arguments = @{ code = $lua } }
+        params  = @{
+            name      = "execute_luau"
+            arguments = @{
+                code           = $lua
+                datamodel_type = "Edit"   # "Edit" / "Server" / "Client" のいずれか（必須）
+            }
+        }
     }
     # ... レスポンスを受け取る
 }
@@ -227,6 +233,29 @@ while ($r -and $r.type -eq "control") {
     $r = WsRecv 10000  # 読み飛ばして次を待つ
 }
 ```
+
+#### `datamodel_type is required` / `Invalid datamodel_type`
+
+**原因**: Studio の MCP プラグイン更新により、`execute_luau` の呼び出しに `datamodel_type` パラメータが必須になった。
+
+**対処**: `arguments` に `datamodel_type` を追加する。有効な値は次の3つ。
+
+| 値 | 用途 |
+|---|---|
+| `"Edit"` | Studio の編集モード（通常の push はこれを使う） |
+| `"Server"` | テストプレイ中のサーバー DataModel |
+| `"Client"` | テストプレイ中のクライアント DataModel |
+
+```powershell
+params = @{
+    name      = "execute_luau"
+    arguments = @{ code = $lua; datamodel_type = "Edit" }
+}
+```
+
+> **確認方法**: WebSocket 接続後の `tools_updated` メッセージに `execute_luau` の `inputSchema` が含まれており、`enum` フィールドで有効値を確認できる。
+
+---
 
 #### `CancellationToken` で WebSocket が Aborted になる
 

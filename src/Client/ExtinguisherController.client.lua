@@ -7,6 +7,7 @@
 	  - Beam エフェクトを追加（低品質設定でも必ず描画される）
 	  - ParticleEmitter は Emit() で強制バースト（Enabled トグルより確実）
 	  - MIN_SPRAY_DURATION でタップ一回でも十分な時間エフェクトが出る
+	  - InputBegan/InputChanged でタッチ位置を明示追跡し、ビームを正しい方向へ飛ばす
 ]]
 
 local Players           = game:GetService("Players")
@@ -21,7 +22,7 @@ local ExtinguishEvent = ReplicatedStorage:WaitForChild("ExtinguishEvent")
 
 local SPRAY_INTERVAL     = 0.12   -- サーバーへの送信間隔（秒）
 local SPRAY_DISTANCE     = 28     -- Beam エフェクトの長さ（スタッズ）
-local MIN_SPRAY_DURATION = 0.4    -- モバイルタップでも見えるよう最低継続時間（秒）
+local MIN_SPRAY_DURATION = 0.5    -- モバイルタップでも見えるよう最低継続時間（秒）
 local TOOL_NAME          = "消火器"
 
 local equippedTool    = nil
@@ -32,6 +33,26 @@ local beamTargetPart  = nil
 local activatedConn   = nil
 local deactivatedConn = nil
 local sprayStartTime  = -math.huge
+
+-- ── モバイルタッチ位置追跡 ────────────────────────────────────────
+-- GetMouseLocation() はモバイルで指を離すと正しい位置を返さない場合があるため、
+-- InputBegan/InputChanged で明示的にタッチ位置を記録する
+
+local isTouchDevice  = UserInputService.TouchEnabled
+local lastTouchPos   = nil  -- 最後のタッチ画面座標（Vector2）
+
+UserInputService.InputBegan:Connect(function(input)
+	-- gameProcessed チェックなし: ツール使用時も gameProcessed=true になる場合があるため
+	if input.UserInputType == Enum.UserInputType.Touch then
+		lastTouchPos = Vector2.new(input.Position.X, input.Position.Y)
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch then
+		lastTouchPos = Vector2.new(input.Position.X, input.Position.Y)
+	end
+end)
 
 -- ── パーティクル作成 ──────────────────────────────────────────
 
@@ -123,11 +144,23 @@ end
 
 -- ── エイムレイ取得 ───────────────────────────────────────────
 
-local function getAimRay()
+-- aimPos: スプレー開始時にロックした画面座標（nil ならリアルタイム取得）
+local function getAimRay(aimPos)
 	if not camera then camera = Workspace.CurrentCamera end
 	if not camera then return nil, nil end
-	local mouse = UserInputService:GetMouseLocation()
-	local ray   = camera:ScreenPointToRay(mouse.X, mouse.Y)
+
+	-- モバイル: 明示追跡したタッチ位置を優先。GetMouseLocation() は
+	-- 指を離した後に正しい値を返さない機種がある。
+	local screenPos
+	if aimPos then
+		screenPos = aimPos
+	elseif isTouchDevice and lastTouchPos then
+		screenPos = lastTouchPos
+	else
+		screenPos = UserInputService:GetMouseLocation()
+	end
+
+	local ray = camera:ScreenPointToRay(screenPos.X, screenPos.Y)
 	return ray.Origin, ray.Direction.Unit
 end
 
@@ -138,12 +171,19 @@ local function startSpray()
 	isSpraying   = true
 	sprayStartTime = os.clock()
 
+	-- モバイルではタップ開始時の画面座標をスナップショット。
+	-- 指が離れた後も GetMouseLocation() ではなくこの座標を使い続けることで
+	-- ビームが正しく火元を向き続ける。
+	local lockedAimPos = (isTouchDevice and lastTouchPos)
+		and Vector2.new(lastTouchPos.X, lastTouchPos.Y)
+		or nil
+
 	if sprayBeam then sprayBeam.Enabled = true end
 
 	task.spawn(function()
 		-- isSpraying が false になっても MIN_SPRAY_DURATION だけは継続
 		repeat
-			local origin, dir = getAimRay()
+			local origin, dir = getAimRay(lockedAimPos)
 			if origin and dir then
 				-- Beam 先端を照準方向へ更新
 				if beamTargetPart then

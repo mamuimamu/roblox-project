@@ -66,7 +66,7 @@ function Invoke-RunCode([string]$lua) {
         jsonrpc  = "2.0"
         id       = "$($script:msgId)"
         method   = "tools/call"
-        params   = @{ name = "execute_luau"; arguments = @{ code = $lua } }
+        params   = @{ name = "execute_luau"; arguments = @{ code = $lua; datamodel_type = "Edit" } }
     }
     $r = WsRecv 20000
     if ($null -eq $r) { Write-Host "  [no response]"; return $null }
@@ -123,6 +123,7 @@ Push-LuaFile "$r\Shared\Config.lua"                       'game:GetService("Repl
 Push-LuaFile "$r\Shared\GameConfig.lua"                   'game:GetService("ReplicatedStorage"):FindFirstChild("Shared")'                                              "GameConfig"           "ModuleScript"
 Push-LuaFile "$r\Server\FireManager.server.lua"           'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "FireManager"          "Script"
 Push-LuaFile "$r\Server\ScoreManager.server.lua"          'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "ScoreManager"         "Script"
+Push-LuaFile "$r\Server\DataManager.server.lua"          'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "DataManager"          "Script"
 Push-LuaFile "$r\Server\VehiclePromptHandler.server.lua"   'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "VehiclePromptHandler"   "Script"
 Push-LuaFile "$r\Server\WaterCannonHandler.server.lua"     'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "WaterCannonHandler"     "Script"
 Push-LuaFile "$r\Server\GameModeManager.server.lua"       'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "GameModeManager"        "Script"

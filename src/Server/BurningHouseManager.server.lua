@@ -27,6 +27,7 @@ local DEFAULT_WALKSPEED   = 16
 local BOOST_WALKSPEED     = 24
 
 local currentWave          = 0
+local isFirstWaveInit      = true   -- セッション最初のウェーブ開始時はセーブをスキップ
 local isWaveTransitioning  = false
 local waveToken            = 0
 local waveStartTime        = 0
@@ -373,6 +374,13 @@ local function extinguishHit(part, amount, player)
 			isWaveTransitioning = true
 			waveToken += 1
 			MissionCompleteEvent:FireAllClients(currentWave)
+
+			-- ウェーブクリア時にプレイヤーデータを自動セーブ
+			local saveBindable = ServerStorage:FindFirstChild("SaveAllPlayers")
+			if saveBindable then
+				task.spawn(function() saveBindable:Invoke() end)
+			end
+
 			ShopOpenEvent:FireAllClients(GameConfig.ShopDuration, nextWavePowerups, powerupBuyers, vehiclePurchased)
 			shopDelayThread = task.delay(WAVE_START_DELAY, function()
 				shopDelayThread = nil
@@ -433,6 +441,20 @@ end
 
 startNextWave = function()
 	currentWave += 1
+
+	-- CurrentWave を常に更新（PlayerRemoving セーブが正しいウェーブを参照するため）
+	local cwVal = ServerStorage:FindFirstChild("CurrentWave")
+	if cwVal then cwVal.Value = currentWave end
+
+	-- セッション最初のウェーブはロード済みデータを上書きしないようにセーブをスキップ
+	if not isFirstWaveInit then
+		local saveBindable = ServerStorage:FindFirstChild("SaveAllPlayers")
+		if saveBindable then
+			task.spawn(function() saveBindable:Invoke() end)
+		end
+	end
+	isFirstWaveInit = false
+
 	local fireCount = math.min(currentWave, MAX_FIRES)
 
 	-- 時間延長パワーアップを反映
@@ -607,11 +629,18 @@ if not rescueVehicle then
 	warn("[BurningHouseManager] RescueVehicle が見つかりません（スキップ）")
 end
 
+-- CurrentWave IntValue を ServerStorage に作成（DataManager がセーブ時にウェーブ番号を読み取る）
+local currentWaveValue = Instance.new("IntValue")
+currentWaveValue.Name   = "CurrentWave"
+currentWaveValue.Value  = 1
+currentWaveValue.Parent = ServerStorage
+
 -- 最初のプレイヤーが参加してキャラクター生成されるまで待つ。
 -- これにより WaveStartEvent がプレイヤーに届き、Wave 1 のアニメーションが正しく表示される。
 -- （TeleportAsync で転送されてきたプレイヤーも含む）
+local firstPlayer
 do
-	local firstPlayer = Players:GetPlayers()[1]
+	firstPlayer = Players:GetPlayers()[1]
 	if not firstPlayer then
 		firstPlayer = Players.PlayerAdded:Wait()
 	end
@@ -621,10 +650,17 @@ do
 	task.wait(0.5)  -- クライアントスクリプトの RemoteEvent 接続を待つバッファ
 end
 
-currentWave          = 1
-currentWaveTimeLimit = WAVE_TIME_LIMIT
-local initFireCount  = math.min(currentWave, MAX_FIRES)
-spawnWaveHouses(initFireCount)
-WaveStartEvent:FireAllClients(currentWave, initFireCount, currentWaveTimeLimit, activePowerups)
-beginWaveTimer(currentWaveTimeLimit)
-print(("[BurningHouseManager] Wave 1 開始 (%d 件)"):format(initFireCount))
+-- DataManager がロード完了後に作成する LoadedWave IntValue を待つ（最大5秒）
+-- DataManager は GetAsync 完了直後に作成するため通常 1〜2 秒で解決する
+local startWave = 1
+local loadedWaveValue = ServerStorage:WaitForChild("LoadedWave", 5)
+if loadedWaveValue then
+	startWave = math.max(1, loadedWaveValue.Value)
+	print(("[BurningHouseManager] 保存済みウェーブ: %d から開始"):format(startWave))
+else
+	warn("[BurningHouseManager] LoadedWave の取得タイムアウト。Wave 1 から開始します。")
+end
+
+-- startNextWave がインクリメントするため 1 引いてセット
+currentWave = startWave - 1
+startNextWave()
