@@ -14,6 +14,9 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 
 local WAVE_TIME_LIMIT = GameConfig.WaveTimeLimit
 
+-- push確認用のビルドタグ（pushするたびに値を変えて、Studio側に反映されたか目視確認する）
+local BUILD_TAG = "build-1"
+
 local screenGui
 local waveTimerThread = nil
 local shopUI          = nil  -- ショップオーバーレイ（開いている間 non-nil）
@@ -78,6 +81,21 @@ local function createScoreUI()
 	label.TextYAlignment       = Enum.TextYAlignment.Center
 	label.Text                 = "スコア: 0 pt"
 	label.Parent               = frame
+
+	-- push確認用ビルドタグ（右上に小さく表示）
+	local buildLabel = Instance.new("TextLabel")
+	buildLabel.Name                 = "BuildLabel"
+	buildLabel.AnchorPoint           = Vector2.new(1, 0)
+	buildLabel.Position              = UDim2.new(1, -8, 0, 4)
+	buildLabel.Size                  = UDim2.new(0, 140, 0, 18)
+	buildLabel.BackgroundTransparency = 1
+	buildLabel.Font                  = Enum.Font.Gotham
+	buildLabel.TextSize              = 12
+	buildLabel.TextColor3            = Color3.fromRGB(150, 150, 150)
+	buildLabel.TextTransparency      = 0.3
+	buildLabel.TextXAlignment        = Enum.TextXAlignment.Right
+	buildLabel.Text                  = BUILD_TAG
+	buildLabel.Parent                = screenGui
 
 	return label
 end
@@ -327,6 +345,85 @@ local function showWaveStart(wave, fireCount)
 	local tweenOut = TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 	TweenService:Create(overlay, tweenOut, { BackgroundTransparency = 1 }):Play()
 	TweenService:Create(title,   tweenOut, { TextTransparency = 1 }):Play()
+	local lastTween = TweenService:Create(sub, tweenOut, { TextTransparency = 1 })
+	lastTween:Play()
+	lastTween.Completed:Wait()
+	overlay:Destroy()
+end
+
+-- ── ボスウェーブ開始アニメーション ──────────────────────────
+-- Wave 5, 10, 15... のときに showWaveStart の代わりに呼ばれる
+
+local function showBossWaveStart(wave, fireCount)
+	local overlay = Instance.new("Frame")
+	overlay.Name                  = "BossWaveOverlay"
+	overlay.Size                  = UDim2.new(1, 0, 1, 0)
+	overlay.BackgroundColor3      = Color3.fromRGB(20, 0, 0)
+	overlay.BackgroundTransparency = 1
+	overlay.ZIndex                = 10
+	overlay.Parent                = screenGui
+
+	-- 背景フラッシュ（赤→黒）
+	local flashTween = TweenService:Create(overlay,
+		TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ BackgroundTransparency = 0.35 })
+	flashTween:Play()
+
+	-- BOSS WAVE!! テキスト
+	local bossTitle = Instance.new("TextLabel")
+	bossTitle.Size                 = UDim2.new(1, 0, 0, 90)
+	bossTitle.Position             = UDim2.new(0, 0, 0.3, 0)
+	bossTitle.BackgroundTransparency = 1
+	bossTitle.Font                 = Enum.Font.GothamBold
+	bossTitle.TextSize             = 72
+	bossTitle.TextColor3           = Color3.fromRGB(255, 40, 20)
+	bossTitle.TextStrokeTransparency = 0.0
+	bossTitle.TextStrokeColor3     = Color3.fromRGB(0, 0, 0)
+	bossTitle.Text                 = "⚡ BOSS WAVE!! ⚡"
+	bossTitle.TextTransparency     = 1
+	bossTitle.ZIndex               = 11
+	bossTitle.Parent               = overlay
+
+	-- Wave 番号
+	local waveNum = Instance.new("TextLabel")
+	waveNum.Size                 = UDim2.new(1, 0, 0, 50)
+	waveNum.Position             = UDim2.new(0, 0, 0.3, 96)
+	waveNum.BackgroundTransparency = 1
+	waveNum.Font                 = Enum.Font.GothamBold
+	waveNum.TextSize             = 40
+	waveNum.TextColor3           = Color3.fromRGB(255, 180, 40)
+	waveNum.TextStrokeTransparency = 0.2
+	waveNum.Text                 = "Wave " .. wave
+	waveNum.TextTransparency     = 1
+	waveNum.ZIndex               = 11
+	waveNum.Parent               = overlay
+
+	-- 注意書き
+	local sub = Instance.new("TextLabel")
+	sub.Size                 = UDim2.new(1, 0, 0, 32)
+	sub.Position             = UDim2.new(0, 0, 0.3, 152)
+	sub.BackgroundTransparency = 1
+	sub.Font                 = Enum.Font.Gotham
+	sub.TextSize             = 22
+	sub.TextColor3           = Color3.fromRGB(255, 255, 255)
+	sub.Text                 = "強化火災が " .. fireCount .. " 件同時発生！"
+	sub.TextTransparency     = 1
+	sub.ZIndex               = 11
+	sub.Parent               = overlay
+
+	local tweenIn = TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+	TweenService:Create(bossTitle, tweenIn, { TextTransparency = 0 }):Play()
+	TweenService:Create(waveNum,   tweenIn, { TextTransparency = 0 }):Play()
+	TweenService:Create(sub,
+		TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ TextTransparency = 0 }):Play()
+
+	task.wait(2.5)
+
+	local tweenOut = TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	TweenService:Create(overlay,   tweenOut, { BackgroundTransparency = 1 }):Play()
+	TweenService:Create(bossTitle, tweenOut, { TextTransparency = 1 }):Play()
+	TweenService:Create(waveNum,   tweenOut, { TextTransparency = 1 }):Play()
 	local lastTween = TweenService:Create(sub, tweenOut, { TextTransparency = 1 })
 	lastTween:Play()
 	lastTween.Completed:Wait()
@@ -865,12 +962,13 @@ end
 task.spawn(function()
 	local GetWaveState = ReplicatedStorage:WaitForChild("GetWaveState", 10)
 	if not GetWaveState then return end
-	local wave, fireCount, timeRemaining = GetWaveState:InvokeServer()
+	local wave, fireCount, timeRemaining, activePowerups = GetWaveState:InvokeServer()
 	if wave and wave > 0 then
 		waveLabel.Text       = "Wave " .. wave
 		fireLabel.Text       = "火災 " .. fireCount .. " 件"
 		fireLabel.TextColor3 = Color3.fromRGB(255, 160, 80)
 		startCountdown(timeRemaining)
+		updateBuffsDisplay(activePowerups or {})
 	end
 
 	local GetVehicleState = ReplicatedStorage:WaitForChild("GetVehicleState", 10)
@@ -899,6 +997,12 @@ MissionCompleteEvent.OnClientEvent:Connect(function()
 	end)
 end)
 
+-- サーバー起動時のバフ復元など、UIだけを更新したい場合に使うイベント
+local PowerupsSyncEvent = ReplicatedStorage:WaitForChild("PowerupsSyncEvent")
+PowerupsSyncEvent.OnClientEvent:Connect(function(powerups)
+	updateBuffsDisplay(powerups or {})
+end)
+
 local ShopOpenEvent = ReplicatedStorage:WaitForChild("ShopOpenEvent")
 ShopOpenEvent.OnClientEvent:Connect(function(duration, powerups, buyers, vPurchased)
 	pendingShopData = {
@@ -910,15 +1014,26 @@ ShopOpenEvent.OnClientEvent:Connect(function(duration, powerups, buyers, vPurcha
 end)
 
 local WaveStartEvent = ReplicatedStorage:WaitForChild("WaveStartEvent")
-WaveStartEvent.OnClientEvent:Connect(function(wave, fireCount, timeLimit, activePowerups)
+WaveStartEvent.OnClientEvent:Connect(function(wave, fireCount, timeLimit, activePowerups, isBossWave)
 	closeShop()
-	waveLabel.Text        = "Wave " .. wave
+	-- ボスウェーブはウェーブラベルを赤色にして視覚的に区別する
+	if isBossWave then
+		waveLabel.Text       = "Wave " .. wave .. " ⚡"
+		waveLabel.TextColor3 = Color3.fromRGB(255, 60, 40)
+	else
+		waveLabel.Text       = "Wave " .. wave
+		waveLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+	end
 	timerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	fireLabel.Text        = "火災 " .. fireCount .. " 件"
 	fireLabel.TextColor3  = Color3.fromRGB(255, 160, 80)
 	startCountdown(timeLimit or WAVE_TIME_LIMIT)
 	updateBuffsDisplay(activePowerups or {})
-	task.spawn(showWaveStart, wave, fireCount)
+	if isBossWave then
+		task.spawn(showBossWaveStart, wave, fireCount)
+	else
+		task.spawn(showWaveStart, wave, fireCount)
+	end
 end)
 
 local TimeUpEvent = ReplicatedStorage:WaitForChild("TimeUpEvent")

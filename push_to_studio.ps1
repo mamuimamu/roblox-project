@@ -1,5 +1,20 @@
 # Push src/ scripts to Roblox Studio via /proxy WebSocket on port 13469
 
+# src ディレクトリのパスを先に確定・検証する（接続前に失敗させてpushの中途半端な実行を防ぐ）
+# $PSScriptRoot がこの実行環境で未設定になるケースがあるため $PSCommandPath にもフォールバックする
+$scriptDir = $PSScriptRoot
+if ([string]::IsNullOrEmpty($scriptDir) -and $PSCommandPath) {
+    $scriptDir = Split-Path -Parent $PSCommandPath
+}
+if ([string]::IsNullOrEmpty($scriptDir) -and $MyInvocation.MyCommand.Path) {
+    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+}
+$r = Join-Path $scriptDir "src"
+if ([string]::IsNullOrEmpty($r) -or -not (Test-Path $r -PathType Container)) {
+    Write-Host "ERROR: src ディレクトリが見つかりません ($r)"
+    exit 1
+}
+
 Add-Type -AssemblyName System.Net.Http
 
 $ws = New-Object System.Net.WebSockets.ClientWebSocket
@@ -103,8 +118,6 @@ print("OK:$name")
     Invoke-RunCode $lua
 }
 
-$r = "c:\Users\kr_im\roblox-project\src"
-
 Write-Host ""
 Write-Host "=== Test ==="
 Invoke-RunCode 'print("MCP connection test OK")'
@@ -113,30 +126,35 @@ Write-Host ""
 Write-Host "=== Containers ==="
 Invoke-RunCode 'local rs=game:GetService("ReplicatedStorage"); local s=rs:FindFirstChild("Shared"); if s and s:IsA("Folder") then print("Shared OK") else if s then s:Destroy() end local f=Instance.new("Folder");f.Name="Shared";f.Parent=rs;print("Created Shared") end'
 
-Push-LuaFile "$r\Server\init.server.lua" 'game:GetService("ServerScriptService")' "Server" "Script"
+# Server/init.server.lua は ServerScriptService 直下の "Server" Script として配置
+$initPath = Join-Path $r "Server\init.server.lua"
+if (Test-Path $initPath) {
+    Push-LuaFile $initPath 'game:GetService("ServerScriptService")' "Server" "Script"
+}
 
 Invoke-RunCode 'local sp=game:GetService("StarterPlayer");local sps=sp:FindFirstChild("StarterPlayerScripts") or sp:WaitForChild("StarterPlayerScripts");local c=sps:FindFirstChild("Client");if c and c:IsA("Folder") then print("Client OK") else if c then c:Destroy() end local f=Instance.new("Folder");f.Name="Client";f.Parent=sps;print("Created Client") end'
 
 Write-Host ""
 Write-Host "=== Scripts ==="
-Push-LuaFile "$r\Shared\Config.lua"                       'game:GetService("ReplicatedStorage"):FindFirstChild("Shared")'                                              "Config"               "ModuleScript"
-Push-LuaFile "$r\Shared\GameConfig.lua"                   'game:GetService("ReplicatedStorage"):FindFirstChild("Shared")'                                              "GameConfig"           "ModuleScript"
-Push-LuaFile "$r\Server\FireManager.server.lua"           'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "FireManager"          "Script"
-Push-LuaFile "$r\Server\ScoreManager.server.lua"          'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "ScoreManager"         "Script"
-Push-LuaFile "$r\Server\DataManager.server.lua"          'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "DataManager"          "Script"
-Push-LuaFile "$r\Server\VehiclePromptHandler.server.lua"   'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "VehiclePromptHandler"   "Script"
-Push-LuaFile "$r\Server\WaterCannonHandler.server.lua"     'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "WaterCannonHandler"     "Script"
-Push-LuaFile "$r\Server\GameModeManager.server.lua"       'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "GameModeManager"        "Script"
-Push-LuaFile "$r\Server\BurningHouseManager.server.lua"   'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "BurningHouseManager"    "Script"
-Push-LuaFile "$r\Server\TownGenerator.server.lua"         'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "TownGenerator"          "Script"
-Push-LuaFile "$r\Server\LightingSetup.server.lua"        'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "LightingSetup"          "Script"
-Push-LuaFile "$r\Server\VehicleColorizer.server.lua"    'game:GetService("ServerScriptService"):FindFirstChild("Server")'                                            "VehicleColorizer"       "Script"
-Push-LuaFile "$r\Client\ExtinguisherController.client.lua"  'game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts"):FindFirstChild("Client")'          "ExtinguisherController"   "LocalScript"
-Push-LuaFile "$r\Client\BurningHouseController.client.lua"  'game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts"):FindFirstChild("Client")'          "BurningHouseController"   "LocalScript"
-Push-LuaFile "$r\Client\ScoreUIController.client.lua"      'game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts"):FindFirstChild("Client")'          "ScoreUIController"       "LocalScript"
-Push-LuaFile "$r\Client\VehicleController.client.lua"      'game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts"):FindFirstChild("Client")'          "VehicleController"       "LocalScript"
-Push-LuaFile "$r\Client\WaterCannonController.client.lua"  'game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts"):FindFirstChild("Client")'          "WaterCannonController"   "LocalScript"
-Push-LuaFile "$r\Client\MinimapController.client.lua"     'game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts"):FindFirstChild("Client")'          "MinimapController"       "LocalScript"
+
+# Shared/*.lua → ReplicatedStorage.Shared 配下に ModuleScript として配置
+Get-ChildItem (Join-Path $r "Shared") -Filter "*.lua" -File | ForEach-Object {
+    Push-LuaFile $_.FullName 'game:GetService("ReplicatedStorage"):FindFirstChild("Shared")' $_.BaseName "ModuleScript"
+}
+
+# Server/*.server.lua（init.server.lua除く）→ ServerScriptService.Server 配下に Script として配置
+Get-ChildItem (Join-Path $r "Server") -Filter "*.server.lua" -File |
+    Where-Object { $_.Name -ne "init.server.lua" } |
+    ForEach-Object {
+        $name = $_.Name -replace "\.server\.lua$", ""
+        Push-LuaFile $_.FullName 'game:GetService("ServerScriptService"):FindFirstChild("Server")' $name "Script"
+    }
+
+# Client/*.client.lua → StarterPlayerScripts.Client 配下に LocalScript として配置
+Get-ChildItem (Join-Path $r "Client") -Filter "*.client.lua" -File | ForEach-Object {
+    $name = $_.Name -replace "\.client\.lua$", ""
+    Push-LuaFile $_.FullName 'game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts"):FindFirstChild("Client")' $name "LocalScript"
+}
 
 Write-Host ""
 Write-Host "=== Done ==="

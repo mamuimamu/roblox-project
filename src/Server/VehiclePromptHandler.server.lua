@@ -90,12 +90,9 @@ local function setupRescueVehicle(v)
 
 	seat:GetPropertyChangedSignal("Occupant"):Connect(updatePromptState)
 
+	-- 車両モデルの購入フラグ変化は promptState のみ更新する
+	-- クライアントへの通知は BurningHouseManager の ShopBuyEvent が per-player で行う
 	vehicle:GetAttributeChangedSignal("VehiclePurchased"):Connect(function()
-		local purchased = vehicle:GetAttribute("VehiclePurchased") == true
-		if purchased then
-			-- 購入時にクライアントへ通知（ボタン表示のため）
-			VehicleStateEvent:FireAllClients(vehicleSpawned, true)
-		end
 		updatePromptState()
 	end)
 
@@ -136,28 +133,39 @@ local function spawnVehicle(player)
 	vehicle.Parent = Workspace
 	vehicleSpawned = true
 	updatePromptState()
-	VehicleStateEvent:FireAllClients(true, true)
+	-- スポーン通知: 購入済みプレイヤーのみにボタン表示を更新する
+	local Players = game:GetService("Players")
+	for _, plr in Players:GetPlayers() do
+		local vp = plr:GetAttribute("VehiclePurchased") == true
+		VehicleStateEvent:FireClient(plr, true, vp)
+	end
 	print("[VehiclePromptHandler] 消防車をスポーン")
 end
 
 local function despawnVehicle()
 	if not vehicleSpawned or not vehicle then return end
-vehicle.Parent = ServerStorage
+	vehicle.Parent = ServerStorage
 	vehicleSpawned = false
 	updatePromptState()
-	VehicleStateEvent:FireAllClients(false, true)
+	local Players = game:GetService("Players")
+	for _, plr in Players:GetPlayers() do
+		local vp = plr:GetAttribute("VehiclePurchased") == true
+		VehicleStateEvent:FireClient(plr, false, vp)
+	end
 	print("[VehiclePromptHandler] 消防車を格納")
 end
 
 -- ── RemoteFunction / Event ハンドラ ──────────────────────────
 
-GetVehicleState.OnServerInvoke = function()
-	local purchased = vehicle and (vehicle:GetAttribute("VehiclePurchased") == true) or false
-	return vehicleSpawned, purchased
+-- GetVehicleState: プレイヤー個人の購入フラグを返す（per-player）
+GetVehicleState.OnServerInvoke = function(player)
+	local purchased = player:GetAttribute("VehiclePurchased") == true
+	return vehicleSpawned and purchased, purchased
 end
 
 VehicleSpawnEvent.OnServerEvent:Connect(function(player, shouldSpawn)
-	local purchased = vehicle and (vehicle:GetAttribute("VehiclePurchased") == true) or false
+	-- このプレイヤー自身が購入済みかチェック（per-player）
+	local purchased = player:GetAttribute("VehiclePurchased") == true
 	if not purchased then return end
 	if shouldSpawn then
 		spawnVehicle(player)
