@@ -31,13 +31,15 @@ TycoonConfig.FireMoneyBase         = 40
 TycoonConfig.FireMoneyPerWave      = 20
 TycoonConfig.FireMoneyTimeBonusMax = 40
 
--- ── ランク（リバース）: Phase 3 で使用 ─────────────────────────
+-- ── ランク（リバース）─────────────────────────────────────────
+-- cost: そのランクに昇格するのに必要な所持金（昇格すると Money は 0 に戻る）
+-- 全ボタン購入の合計が約 $86,600 なので、最初の昇格は一通り建て終えた頃に届く額にしている
 TycoonConfig.Ranks = {
-	{ name = "分署",       mult = 1.0  },
-	{ name = "消防署",     mult = 1.5  },
-	{ name = "消防本部",   mult = 2.25 },
-	{ name = "広域消防局", mult = 3.4  },
-	{ name = "消防総監部", mult = 5.0  },
+	{ name = "分署",       mult = 1.0,  cost = 0         },
+	{ name = "消防署",     mult = 1.5,  cost = 100000    },
+	{ name = "消防本部",   mult = 2.25, cost = 250000    },
+	{ name = "広域消防局", mult = 3.4,  cost = 600000    },
+	{ name = "消防総監部", mult = 5.0,  cost = 1500000   },
 }
 
 -- ── 購入ボタン定義 ──────────────────────────────────────────
