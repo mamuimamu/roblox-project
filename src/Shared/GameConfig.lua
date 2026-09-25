@@ -25,7 +25,7 @@ local GameConfig = {
 	WaveTimeLimit             = 180,
 	ShopDuration              = 15,   -- ウェーブ間ショップ表示秒数
 	ShopItems = {
-		{ id = "vehicle",     name = "消防車",     desc = "消防車＆水上砲を解放（永続）", price = 100 },
+		-- 消防車は Phase 2 から消防署タイクーンの「車庫」建設で解放する（TycoonConfig 参照）
 		{ id = "waterBoost",  name = "消火強化",   desc = "消火力 1.5倍（今Wave）",       price = 25  },
 		{ id = "timeExtend",  name = "時間延長",   desc = "次Wave +60秒",                 price = 40  },
 		{ id = "speedBoost",  name = "スピードUP", desc = "移動速度 1.5倍（今Wave）",     price = 15  },

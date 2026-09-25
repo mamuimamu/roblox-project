@@ -1,6 +1,10 @@
 --[[
 	BurningHouseManager（Server / Script）
 	消火判定・焦げ変化・環境音・ウェーブ管理・制限時間・マルチ火災・ショップを担う。
+	タイクーン連携（Economy 経由）:
+	  ・消火すると Money($) を付与（ウェーブ番号・残り時間・収入倍率に比例）
+	  ・放水塔 → 消火力アップ / 訓練場 → 制限時間延長
+	  ・隊員の消火支援（TycoonManager から ServerStorage.CrewExtinguish で通知）
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -10,6 +14,7 @@ local Players           = game:GetService("Players")
 
 local Shared     = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local Economy    = require(script.Parent:WaitForChild("Economy"))
 
 local FIRE_SOUND_ID       = "rbxassetid://6792293721"
 local CHAR_COLOR          = Color3.fromRGB(22, 22, 22)
@@ -99,6 +104,8 @@ local ShopBuyEvent          = getOrCreateRemoteEvent("ShopBuyEvent")
 local ShopEndEvent          = getOrCreateRemoteEvent("ShopEndEvent")
 local BossWaveStartEvent    = getOrCreateRemoteEvent("BossWaveStartEvent")  -- ボスウェーブ通知
 local PowerupsSyncEvent     = getOrCreateRemoteEvent("PowerupsSyncEvent")   -- バフ復元など、UIのみ更新したい時の通知
+local TycoonCollectEvent    = getOrCreateRemoteEvent("TycoonCollectEvent")  -- 消火報酬 $ のポップアップ表示
+local CrewSupportEvent      = getOrCreateRemoteEvent("CrewSupportEvent")    -- 隊員の消火支援の演出（位置）
 
 local GetWaveState = ReplicatedStorage:FindFirstChild("GetWaveState")
 if not (GetWaveState and GetWaveState:IsA("RemoteFunction")) then
@@ -123,6 +130,14 @@ local function addExtinguishScore(player, remainingTime)
 	if points and points:IsA("IntValue") then
 		local timeBonus = math.floor((remainingTime / currentWaveTimeLimit) * GameConfig.TimeBonusMax)
 		points.Value += GameConfig.PointsPerFire + timeBonus
+	end
+
+	-- タイクーン通貨: 消火報酬 $（ウェーブが進むほど・早く消すほど多い）
+	local money = leaderstats:FindFirstChild("Money")
+	if money and money:IsA("IntValue") then
+		local reward = Economy.getFireReward(player, currentWave, remainingTime / currentWaveTimeLimit)
+		money.Value += reward
+		TycoonCollectEvent:FireClient(player, reward)
 	end
 end
 
@@ -457,6 +472,11 @@ local function extinguishHit(part, amount, player)
 	local d = burningData[part]
 	if not d or d.extinguished then return end
 
+	-- 放水塔などの消火力ボーナス（消火したプレイヤーの消防署の設備で決まる）
+	if player then
+		amount *= Economy.getExtinguishMultiplier(player)
+	end
+
 	d.intensity = math.max(0, d.intensity - amount)
 	applyState(part, d)
 
@@ -581,6 +601,13 @@ startNextWave = function()
 		end
 	end
 
+	-- 訓練場などの制限時間ボーナス（全プレイヤー中の最大値を採用）
+	local timeBonus = 0
+	for _, plr in Players:GetPlayers() do
+		timeBonus = math.max(timeBonus, Economy.getWaveTimeBonus(plr))
+	end
+	currentWaveTimeLimit += timeBonus
+
 	-- clearActiveHouses でリセットされるため spawnWaveHouses の後に適用
 	local applySpeed = nextWavePowerups.speedBoost
 	local applyWater = nextWavePowerups.waterBoost
@@ -683,6 +710,25 @@ WaterCannonFire.OnServerEvent:Connect(function(player, camPos, direction)
 
 	local mult = activePowerups.waterBoost and 1.5 or 1.0
 	extinguishHit(burnResult.Instance, WATER_CANNON_AMOUNT * mult, player)
+end)
+
+-- 隊員の消火支援: 燃えている火を1つランダムに選んで少しずつ弱める
+local crewRng = Random.new()
+task.spawn(function()
+	local crewExtinguish = ServerStorage:WaitForChild("CrewExtinguish", 30)
+	if not crewExtinguish then
+		warn("[BurningHouseManager] CrewExtinguish が見つかりません（隊員の消火支援は無効）")
+		return
+	end
+	crewExtinguish.Event:Connect(function(player, amount)
+		if isWaveTransitioning then return end
+		local parts = burningPartsList()
+		if #parts == 0 then return end
+		local target = parts[crewRng:NextInteger(1, #parts)]
+		local pos = target.Position
+		extinguishHit(target, amount, player)
+		CrewSupportEvent:FireAllClients(pos)
+	end)
 end)
 
 RetryWaveEvent.OnServerEvent:Connect(function()

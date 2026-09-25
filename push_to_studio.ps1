@@ -1,4 +1,13 @@
-# Push src/ scripts to Roblox Studio via /proxy WebSocket on port 13469
+﻿# Push src/ scripts to Roblox Studio via /proxy WebSocket on port 13469
+# 使い方: .\push_to_studio.ps1 -StudioId <id>
+#   StudioMCP は複数の Studio が接続されている場合 studio_id が必須。
+#   ID は MCP の list_roblox_studios ツールで確認する。環境変数 ROBLOX_STUDIO_ID でも指定可。
+param([string]$StudioId = $env:ROBLOX_STUDIO_ID)
+
+if ([string]::IsNullOrEmpty($StudioId)) {
+    Write-Host "ERROR: -StudioId を指定してください（list_roblox_studios で確認）"
+    exit 1
+}
 
 # src ディレクトリのパスを先に確定・検証する（接続前に失敗させてpushの中途半端な実行を防ぐ）
 # $PSScriptRoot がこの実行環境で未設定になるケースがあるため $PSCommandPath にもフォールバックする
@@ -81,7 +90,7 @@ function Invoke-RunCode([string]$lua) {
         jsonrpc  = "2.0"
         id       = "$($script:msgId)"
         method   = "tools/call"
-        params   = @{ name = "execute_luau"; arguments = @{ code = $lua; datamodel_type = "Edit" } }
+        params   = @{ name = "execute_luau"; arguments = @{ code = $lua; datamodel_type = "Edit"; studio_id = $StudioId } }
     }
     $r = WsRecv 20000
     if ($null -eq $r) { Write-Host "  [no response]"; return $null }
@@ -141,6 +150,14 @@ Write-Host "=== Scripts ==="
 Get-ChildItem (Join-Path $r "Shared") -Filter "*.lua" -File | ForEach-Object {
     Push-LuaFile $_.FullName 'game:GetService("ReplicatedStorage"):FindFirstChild("Shared")' $_.BaseName "ModuleScript"
 }
+
+# Server/*.lua（.server.lua 以外）→ ServerScriptService.Server 配下に ModuleScript として配置
+# （サーバー専用の共有モジュール: PlayerProfiles / StationBuilder など）
+Get-ChildItem (Join-Path $r "Server") -Filter "*.lua" -File |
+    Where-Object { $_.Name -notlike "*.server.lua" } |
+    ForEach-Object {
+        Push-LuaFile $_.FullName 'game:GetService("ServerScriptService"):FindFirstChild("Server")' $_.BaseName "ModuleScript"
+    }
 
 # Server/*.server.lua（init.server.lua除く）→ ServerScriptService.Server 配下に Script として配置
 Get-ChildItem (Join-Path $r "Server") -Filter "*.server.lua" -File |
