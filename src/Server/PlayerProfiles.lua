@@ -23,6 +23,8 @@ function PlayerProfiles.default()
 		DailyStreak     = 0,   -- 連続ログイン日数（Phase 5）
 		LastDailyClaim  = 0,   -- 最後にデイリー報酬を受け取った日（Phase 5）
 		PurchaseHistory = {},  -- 付与済みレシートID（Phase 4 の二重付与防止）
+		BoostUntil      = 0,   -- 収入2倍ブーストの終了時刻 os.time()（Phase 4）
+		TotalEarned     = 0,   -- これまでに稼いだ $ の累計（ランキング用・昇格してもリセットしない）
 	}
 end
 

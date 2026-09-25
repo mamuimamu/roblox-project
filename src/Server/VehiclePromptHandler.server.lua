@@ -129,6 +129,10 @@ local function spawnVehicle(player)
 		end
 	end
 
+	-- VIP消防車パス: 呼び出したプレイヤーが所持していれば最高速度 1.3倍
+	local vip = player ~= nil and player:GetAttribute("Pass_VIPTruck") == true
+	vehicle:SetAttribute("MaxSpeed", GameConfig.RescueTruckMaxSpeed * (vip and 1.3 or 1))
+
 	vehicle:PivotTo(spawnCF)
 	vehicle.Parent = Workspace
 	vehicleSpawned = true

@@ -31,6 +31,24 @@ TycoonConfig.FireMoneyBase         = 40
 TycoonConfig.FireMoneyPerWave      = 20
 TycoonConfig.FireMoneyTimeBonusMax = 40
 
+-- ── リテンション（Phase 5）─────────────────────────────────────
+-- デイリーボーナス: 報酬 = max(minMoney, 秒間収入 × minutes 分)。7日目はブーストも付く
+-- 日付の切り替わりは UTC 0時（日本時間 9時）
+TycoonConfig.DailyRewards = {
+	{ minMoney = 500,   minutes = 5  },
+	{ minMoney = 1000,  minutes = 8  },
+	{ minMoney = 2000,  minutes = 12 },
+	{ minMoney = 3000,  minutes = 15 },
+	{ minMoney = 5000,  minutes = 20 },
+	{ minMoney = 8000,  minutes = 25 },
+	{ minMoney = 15000, minutes = 40, boostMinutes = 15 },
+}
+TycoonConfig.OfflineRate         = 0.5  -- オフライン収入 = 秒間収入 × 経過秒 × この割合
+TycoonConfig.OfflineMaxHours     = 8    -- オフライン収入の上限（時間）
+TycoonConfig.OfflineMaxHoursPass = 24   -- 「オフライン24時間」パス所持時の上限
+TycoonConfig.OfflineMinSeconds   = 60   -- これ未満の留守はオフライン収入なし
+TycoonConfig.PremiumBonus        = 0.1  -- Roblox Premium 会員の収入ボーナス（+10%）
+
 -- ── ランク（リバース）─────────────────────────────────────────
 -- cost: そのランクに昇格するのに必要な所持金（昇格すると Money は 0 に戻る）
 -- 全ボタン購入の合計が約 $86,600 なので、最初の昇格は一通り建て終えた頃に届く額にしている

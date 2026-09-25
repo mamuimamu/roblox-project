@@ -17,6 +17,7 @@
 
 	ServerStorage との連携:
 	  SaveAllPlayers   (BindableFunction) : セーブを要求
+  SavePlayer       (BindableFunction) : 1人分を即セーブし成否を返す（課金用）
 	  LoadedWave       (IntValue)         : BurningHouseManager が起動時に参照するウェーブ番号
 	  CurrentWave      (IntValue)         : BurningHouseManager がウェーブ番号を書き込む
 	  ActiveWaterBoost (BoolValue)        : 消火強化バフ（OR ロジックで双方向同期）
@@ -68,16 +69,17 @@ end
 
 -- ── セーブ ──────────────────────────────────────────────────
 
+-- 戻り値: セーブに成功したら true（課金処理が付与確定の判断に使う）
 local function savePlayerData(player)
 	-- ロード未完了・ロード失敗のプレイヤーは保存しない（既存データの上書き防止）
-	if player:GetAttribute("DataLoaded") ~= true then return end
+	if player:GetAttribute("DataLoaded") ~= true then return false end
 	if player:GetAttribute("DataLoadFailed") == true then
 		warn(("[DataManager] %s はロード失敗状態のためセーブをスキップ"):format(player.Name))
-		return
+		return false
 	end
 
 	local leaderstats = player:FindFirstChild("leaderstats")
-	if not leaderstats then return end
+	if not leaderstats then return false end
 
 	local fires  = leaderstats:FindFirstChild("Fires")
 	local points = leaderstats:FindFirstChild("Points")
@@ -119,6 +121,8 @@ local function savePlayerData(player)
 		DailyStreak      = profile.DailyStreak,
 		LastDailyClaim   = profile.LastDailyClaim,
 		PurchaseHistory  = history,
+		BoostUntil       = profile.BoostUntil or 0,
+		TotalEarned      = profile.TotalEarned or 0,
 	}
 
 	local ok, err = pcall(function()
@@ -136,6 +140,7 @@ local function savePlayerData(player)
 	else
 		warn(("[DataManager] %s のセーブ失敗: %s"):format(player.Name, tostring(err)))
 	end
+	return ok
 end
 
 local function saveAllPlayers()
@@ -184,6 +189,8 @@ local function loadPlayerData(player)
 		profile.DailyStreak     = data.DailyStreak     or profile.DailyStreak
 		profile.LastDailyClaim  = data.LastDailyClaim  or profile.LastDailyClaim
 		profile.PurchaseHistory = data.PurchaseHistory or profile.PurchaseHistory
+		profile.BoostUntil      = data.BoostUntil      or profile.BoostUntil
+		profile.TotalEarned     = data.TotalEarned     or profile.TotalEarned
 		print(("[DataManager] %s をロード (Wave:%d Fires:%d Points:%d Vehicle:%s Water:%s Speed:%s)"):format(
 			player.Name, savedWave, savedFires, savedPoints, tostring(savedVehicle),
 			tostring(savedWaterBoost), tostring(savedSpeedBoost)))
@@ -229,6 +236,14 @@ local function loadPlayerData(player)
 end
 
 -- ── BindableFunction ─────────────────────────────────────────
+
+-- 1人分だけ即セーブ（MonetizationManager の ProcessReceipt が使う）。成功で true を返す
+local SavePlayerBindable = Instance.new("BindableFunction")
+SavePlayerBindable.Name     = "SavePlayer"
+SavePlayerBindable.Parent   = ServerStorage
+SavePlayerBindable.OnInvoke = function(player)
+	return savePlayerData(player)
+end
 
 local SaveAllBindable = Instance.new("BindableFunction")
 SaveAllBindable.Name     = "SaveAllPlayers"

@@ -163,6 +163,19 @@ function StationBuilder.buildBase(parent, origin, plotSize)
 	-- テレポート先（「消防署へ」ボタン）
 	local spawnPoint = makeMarker(base, origin, "StationSpawn", Vector3.new(0, 3, -4))
 
+	-- ショップ看板（本署と放水塔のあいだ。プロンプトで Robux ショップを開く）
+	local kiosk = makePart(base, origin, "ShopKiosk", Vector3.new(6, 7, 1.5), Vector3.new(24, 3.5, -40),
+		Color3.fromRGB(215, 160, 20), Enum.Material.SmoothPlastic)
+	addSurfaceText(kiosk, Enum.NormalId.Front, "🛒 SHOP", Color3.new(1, 1, 1), Color3.fromRGB(215, 160, 20))
+	local shopPrompt = Instance.new("ProximityPrompt")
+	shopPrompt.Name                  = "ShopPrompt"
+	shopPrompt.ActionText            = "ショップを開く"
+	shopPrompt.ObjectText            = "消防署ショップ"
+	shopPrompt.HoldDuration          = 0
+	shopPrompt.MaxActivationDistance = 10
+	shopPrompt.RequiresLineOfSight   = false
+	shopPrompt.Parent                = kiosk
+
 	return {
 		folder         = base,
 		collector      = collector,
@@ -170,6 +183,7 @@ function StationBuilder.buildBase(parent, origin, plotSize)
 		collectorLabel = collectorLabel,
 		signLabel      = signLabel,
 		spawnPoint     = spawnPoint,
+		shopPrompt     = shopPrompt,
 	}
 end
 
@@ -450,11 +464,12 @@ local Players = game:GetService("Players")
 
 --[[
 	消防隊員の NPC（R15）を作る。紺の防火服＋黄色いヘルメット。
+	elite = true のときは精鋭隊員（ゲームパス）: 金色ヘルメット＋オレンジの防火服。
 	spawnPos: 区画ローカル座標。戻り値は Model（Humanoid 付き）、失敗時 nil。
 ]]
-function StationBuilder.buildCrew(parent, origin, index, spawnPos)
+function StationBuilder.buildCrew(parent, origin, index, spawnPos, elite)
 	local desc = Instance.new("HumanoidDescription")
-	local navy = Color3.fromRGB(30, 40, 70)
+	local navy = elite and Color3.fromRGB(200, 90, 20) or Color3.fromRGB(30, 40, 70)
 	local skin = Color3.fromRGB(234, 184, 146)
 	desc.HeadColor     = skin
 	desc.LeftArmColor  = navy
@@ -472,12 +487,12 @@ function StationBuilder.buildCrew(parent, origin, index, spawnPos)
 		return nil
 	end
 
-	model.Name = "Crew_" .. index
+	model.Name = (elite and "EliteCrew_" or "Crew_") .. index
 	local hum  = model:FindFirstChildOfClass("Humanoid")
 	local head = model:FindFirstChild("Head")
 	local root = model:FindFirstChild("HumanoidRootPart")
 	if hum then
-		hum.DisplayName          = "隊員" .. index
+		hum.DisplayName          = elite and "⭐精鋭隊員" or ("隊員" .. index)
 		hum.WalkSpeed            = 8
 		hum.DisplayDistanceType  = Enum.HumanoidDisplayDistanceType.Viewer
 		hum.NameDisplayDistance  = 40
@@ -489,8 +504,8 @@ function StationBuilder.buildCrew(parent, origin, index, spawnPos)
 		helmet.Name       = "Helmet"
 		helmet.Shape      = Enum.PartType.Ball
 		helmet.Size       = Vector3.new(1.5, 1.5, 1.5)
-		helmet.Color      = Color3.fromRGB(255, 205, 40)
-		helmet.Material   = Enum.Material.SmoothPlastic
+		helmet.Color      = elite and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(255, 205, 40)
+		helmet.Material   = elite and Enum.Material.Foil or Enum.Material.SmoothPlastic
 		helmet.CanCollide = false
 		helmet.Massless   = true
 		helmet.CFrame     = head.CFrame * CFrame.new(0, 0.35, 0)
