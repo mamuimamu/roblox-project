@@ -51,7 +51,7 @@ TycoonConfig.PremiumBonus        = 0.1  -- Roblox Premium 会員の収入ボー�
 
 -- ── ランク（リバース）─────────────────────────────────────────
 -- cost: そのランクに昇格するのに必要な所持金（昇格すると Money は 0 に戻る）
--- 全ボタン購入の合計が約 $86,600 なので、最初の昇格は一通り建て終えた頃に届く額にしている
+-- 全ボタン購入の合計は約 $136,600（本部タワー含む）。最初の昇格はヘリポートまで建てた頃に届く額
 TycoonConfig.Ranks = {
 	{ name = "分署",       mult = 1.0,  cost = 0         },
 	{ name = "消防署",     mult = 1.5,  cost = 100000    },
@@ -139,6 +139,10 @@ TycoonConfig.Buttons = {
 
 	{ id = "helipad",   name = "ヘリポート",       price = 25000, requires = { "ambulance" },
 	  kind = "structure", build = "Helipad", pad = Vector2.new(66, 4), incomeBonus = 0.3 },
+
+	-- 最上位の建物: 本署＋司令室の上に積み上げる高層タワー（パッドは司令室と同じ位置を再利用）
+	{ id = "hq",        name = "消防本部タワー",   price = 50000, requires = { "helipad", "office" },
+	  kind = "structure", build = "HQTower", pad = Vector2.new(0, -12), incomeBonus = 0.5 },
 }
 
 -- id → 定義 の逆引きテーブル

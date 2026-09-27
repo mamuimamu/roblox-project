@@ -1,11 +1,11 @@
 --[[
 	ShopUIController（Client / LocalScript）
 	Robux ショップ画面。
-	  ・画面左の「🛒 ショップ」ボタン、または区画の SHOP 看板（OpenShopEvent）で開く
+	  ・左端中央の縦一列（HudLayout）の「🛒 ショップ」ボタン、または区画の SHOP 看板（OpenShopEvent）で開く
 	  ・タブ「ゲームパス」「アイテム」。価格は MarketplaceService:GetProductInfo から取得
 	  ・id = 0（未設定）のアイテムは「準備中」で購入不可
 	  ・購入結果（PurchaseResultEvent）のポップアップ
-	  ・収入2倍ブーストの残り時間表示（所持金パネルの上）
+	  ・収入2倍ブーストの残り時間表示（上部中央、所持金パネルの下）
 	  ・Roblox Premium の案内（会員は収入 +10%）
 ]]
 
@@ -21,6 +21,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local Shared             = ReplicatedStorage:WaitForChild("Shared")
 local TycoonConfig       = require(Shared:WaitForChild("TycoonConfig"))
 local MonetizationConfig = require(Shared:WaitForChild("MonetizationConfig"))
+local HudLayout          = require(Shared:WaitForChild("HudLayout"))
 
 local OpenShopEvent       = ReplicatedStorage:WaitForChild("OpenShopEvent")
 local PurchaseResultEvent = ReplicatedStorage:WaitForChild("PurchaseResultEvent")
@@ -33,6 +34,7 @@ screenGui.ResetOnSpawn   = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder   = 5  -- 他の HUD より手前に出す
 screenGui.Parent         = playerGui
+HudLayout.applyScale(screenGui)  -- スマホでは画面に合わせて縮小
 
 local function addCorner(inst, radius)
 	local c = Instance.new("UICorner")
@@ -288,20 +290,8 @@ for _, pass in ipairs(MonetizationConfig.GamePasses) do
 	end)
 end
 
--- 画面左中央のショップボタン
-local shopBtn = Instance.new("TextButton")
-shopBtn.Name             = "ShopButton"
-shopBtn.AnchorPoint      = Vector2.new(0, 0.5)
-shopBtn.Position         = UDim2.new(0, 16, 0.5, 0)
-shopBtn.Size             = UDim2.new(0, 72, 0, 72)
-shopBtn.BackgroundColor3 = GOLD
-shopBtn.Font             = Enum.Font.GothamBlack
-shopBtn.TextSize         = 16
-shopBtn.TextColor3       = Color3.new(1, 1, 1)
-shopBtn.TextWrapped      = true
-shopBtn.Text             = "🛒\nショップ"
-shopBtn.Parent           = screenGui
-addCorner(shopBtn, 12)
+-- 左端中央の縦一列の一番下にショップボタンを置く
+local shopBtn = HudLayout.makeColumnButton("ShopButton", "🛒 ショップ", 5, GOLD)
 shopBtn.Activated:Connect(function()
 	if panel.Visible then closeShop() else openShop() end
 end)
@@ -311,7 +301,7 @@ end)
 local function popup(text, color)
 	local label = Instance.new("TextLabel")
 	label.AnchorPoint            = Vector2.new(0.5, 0)
-	label.Position               = UDim2.new(0.5, 0, 0, 90)
+	label.Position               = UDim2.new(0.5, 0, 0, 100)  -- 所持金・ブースト表示の下
 	label.Size                   = UDim2.new(0, 520, 0, 44)
 	label.BackgroundTransparency = 1
 	label.Font                   = Enum.Font.GothamBlack
@@ -332,12 +322,12 @@ PurchaseResultEvent.OnClientEvent:Connect(function(ok, message)
 end)
 
 -- ── ブースト残り時間 ─────────────────────────────────────────
--- 所持金パネル（TycoonUI、左下 -126）のさらに上に表示する
+-- 所持金パネル（TycoonUI、上部中央 8〜60px）のすぐ下に表示する
 
 local boostLabel = Instance.new("TextLabel")
 boostLabel.Name                   = "BoostLabel"
-boostLabel.AnchorPoint            = Vector2.new(0, 1)
-boostLabel.Position               = UDim2.new(0, 16, 1, -184)
+boostLabel.AnchorPoint            = Vector2.new(0.5, 0)
+boostLabel.Position               = UDim2.new(0.5, 0, 0, 66)
 boostLabel.Size                   = UDim2.new(0, 200, 0, 28)
 boostLabel.BackgroundColor3       = Color3.fromRGB(120, 60, 200)
 boostLabel.BackgroundTransparency = 0.15

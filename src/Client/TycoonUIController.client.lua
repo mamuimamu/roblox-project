@@ -1,8 +1,8 @@
 --[[
 	TycoonUIController（Client / LocalScript）
 	消防署タイクーンのクライアント表示。
-	  ・所持金 HUD（左下、スコアパネルの上）とランク表示
-	  ・「消防署へ」「町へ」テレポートボタン
+	  ・所持金 HUD（上部中央）とランク表示
+	  ・「消防署へ」「町へ」テレポートボタン（左端中央の縦一列 = HudLayout）
 	  ・購入パッドの価格表示を「買える＝緑／買えない＝赤」に色分け
 	  ・出動レーンを走るミニ消防車の演出（サーバーの TycoonDropEvent を受けて再生）
 	  ・回収額／購入結果／消火報酬のポップアップ
@@ -20,6 +20,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local Shared       = ReplicatedStorage:WaitForChild("Shared")
 local TycoonConfig = require(Shared:WaitForChild("TycoonConfig"))
+local HudLayout    = require(Shared:WaitForChild("HudLayout"))
 
 local TycoonDropEvent     = ReplicatedStorage:WaitForChild("TycoonDropEvent")
 local TycoonCollectEvent  = ReplicatedStorage:WaitForChild("TycoonCollectEvent")
@@ -42,12 +43,13 @@ screenGui.Name           = "TycoonUI"
 screenGui.ResetOnSpawn   = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent         = playerGui
+HudLayout.applyScale(screenGui)  -- スマホでは画面に合わせて縮小
 
--- 角丸の半透明パネルを作る
+-- 角丸の半透明パネルを作る（上部中央に置く）
 local function makePanel(name, position, size)
 	local frame = Instance.new("Frame")
 	frame.Name                   = name
-	frame.AnchorPoint            = Vector2.new(0, 1)
+	frame.AnchorPoint            = Vector2.new(0.5, 0)
 	frame.Position               = position
 	frame.Size                   = size
 	frame.BackgroundColor3       = Color3.fromRGB(0, 0, 0)
@@ -61,8 +63,8 @@ local function makePanel(name, position, size)
 	return frame
 end
 
--- 所持金パネル（ScoreUI のスコアパネルと「🚒 呼ぶ」ボタンの上に置く）
-local moneyPanel = makePanel("MoneyPanel", UDim2.new(0, 16, 1, -126), UDim2.new(0, 200, 0, 52))
+-- 所持金パネル（上部中央。左上はウェーブパネル、左端はボタン列なので空いている上中央に置く）
+local moneyPanel = makePanel("MoneyPanel", UDim2.new(0.5, 0, 0, 8), UDim2.new(0, 270, 0, 52))
 
 local moneyLabel = Instance.new("TextLabel")
 moneyLabel.Name                   = "MoneyLabel"
@@ -72,7 +74,7 @@ moneyLabel.BackgroundTransparency = 1
 moneyLabel.Font                   = Enum.Font.GothamBlack
 moneyLabel.TextSize               = 24
 moneyLabel.TextColor3             = Color3.fromRGB(120, 255, 140)
-moneyLabel.TextXAlignment         = Enum.TextXAlignment.Left
+moneyLabel.TextXAlignment         = Enum.TextXAlignment.Center
 moneyLabel.Text                   = "💵 $0"
 moneyLabel.Parent                 = moneyPanel
 
@@ -82,30 +84,14 @@ rankLabel.Position               = UDim2.new(0, 12, 0, 30)
 rankLabel.Size                   = UDim2.new(1, -24, 0, 18)
 rankLabel.BackgroundTransparency = 1
 rankLabel.Font                   = Enum.Font.GothamBold
-rankLabel.TextSize               = 14
+rankLabel.TextSize               = 13
 rankLabel.TextColor3             = Color3.fromRGB(220, 220, 220)
-rankLabel.TextXAlignment         = Enum.TextXAlignment.Left
+rankLabel.TextXAlignment         = Enum.TextXAlignment.Center
 rankLabel.Parent                 = moneyPanel
 
--- テレポートボタン
-local function makeTeleportButton(name, text, xOffset, destination)
-	local btn = Instance.new("TextButton")
-	btn.Name                   = name
-	btn.AnchorPoint            = Vector2.new(0, 1)
-	btn.Position               = UDim2.new(0, xOffset, 1, -126)
-	btn.Size                   = UDim2.new(0, 110, 0, 52)
-	btn.BackgroundColor3       = Color3.fromRGB(190, 40, 35)
-	btn.BackgroundTransparency = 0.1
-	btn.BorderSizePixel        = 0
-	btn.Font                   = Enum.Font.GothamBold
-	btn.TextSize               = 16
-	btn.TextColor3             = Color3.new(1, 1, 1)
-	btn.Text                   = text
-	btn.Parent                 = screenGui
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent       = btn
+-- 縦一列のボタン（order: 並び順。1 = 呼ぶ(ScoreUI), 5 = ショップ(ShopUI)）
+local function makeTeleportButton(name, text, order, destination)
+	local btn = HudLayout.makeColumnButton(name, text, order, Color3.fromRGB(190, 40, 35))
 
 	if destination then
 		btn.Activated:Connect(function()
@@ -115,8 +101,8 @@ local function makeTeleportButton(name, text, xOffset, destination)
 	return btn
 end
 
-makeTeleportButton("ToStationButton", "🚒 消防署へ", 224, "station")
-local toTownBtn = makeTeleportButton("ToTownButton", "🏙 町へ", 342, "town")
+makeTeleportButton("ToStationButton", "🏠 消防署へ", 2, "station")
+local toTownBtn = makeTeleportButton("ToTownButton", "🏙 町へ", 3, "town")
 toTownBtn.BackgroundColor3 = Color3.fromRGB(50, 90, 160)
 
 local function updateMoney()
@@ -139,7 +125,7 @@ player:GetAttributeChangedSignal("CrewCount"):Connect(updateRank)
 
 -- ── ランク昇格 ───────────────────────────────────────────────
 
-local rankUpBtn = makeTeleportButton("RankUpButton", "🏅 昇格", 460, nil)
+local rankUpBtn = makeTeleportButton("RankUpButton", "🏅 昇格", 4, nil)
 rankUpBtn.BackgroundColor3 = Color3.fromRGB(90, 90, 90)
 
 local rankDialog = nil  -- 確認ダイアログ（開いている間 non-nil）

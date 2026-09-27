@@ -379,6 +379,40 @@ function builders.Helipad(model, origin)
 	makePart(model, origin, "Heli_Skid_R", Vector3.new(0.4, 0.4, 8), Vector3.new(cx + 2.5, 1.2, cz + 6), CLR.metal, Enum.Material.Metal)
 end
 
+-- 消防本部タワー: 司令室（屋根の上面 Y=24）の上に3フロア積み上げる高層ビル
+function builders.HQTower(model, origin)
+	local cx, cz, w, d = 0, -31, 18, 14   -- 司令室のアンテナ（X=10）に当たらない幅
+	local y0, floorH, floors = 24, 8, 3
+	local white = Color3.fromRGB(235, 235, 235)
+	for f = 0, floors - 1 do
+		local yb = y0 + f * floorH
+		-- 床スラブ（赤いライン）と、全面ガラスのフロア
+		makePart(model, origin, "FloorBand", Vector3.new(w + 0.6, 1, d + 0.6), Vector3.new(cx, yb + 0.5, cz), CLR.brick, Enum.Material.Concrete)
+		makePart(model, origin, "FloorGlass", Vector3.new(w, floorH - 1, d), Vector3.new(cx, yb + 1 + (floorH - 1) / 2, cz),
+			CLR.glass, Enum.Material.Glass, { Transparency = 0.15 })
+		-- 四隅の柱（白）
+		for _, off in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do
+			makePart(model, origin, "Pillar", Vector3.new(1.2, floorH, 1.2),
+				Vector3.new(cx + off[1] * (w / 2), yb + floorH / 2, cz + off[2] * (d / 2)), white, Enum.Material.Concrete)
+		end
+	end
+	local topY = y0 + floors * floorH
+	makePart(model, origin, "Roof", Vector3.new(w + 1, 1.2, d + 1), Vector3.new(cx, topY + 0.6, cz), CLR.brick, Enum.Material.Concrete)
+
+	-- 屋上の看板（町側を向く）
+	local sign = makePart(model, origin, "Sign", Vector3.new(16, 3.4, 0.4), Vector3.new(cx, topY + 3, cz - d / 2 + 1), CLR.brick)
+	addSurfaceText(sign, Enum.NormalId.Front, "🚒 消防本部", CLR.trim, CLR.brick)
+	makePart(model, origin, "SignPost_L", Vector3.new(0.4, 2, 0.4), Vector3.new(cx - 6, topY + 1.2, cz - d / 2 + 1), CLR.metal, Enum.Material.Metal)
+	makePart(model, origin, "SignPost_R", Vector3.new(0.4, 2, 0.4), Vector3.new(cx + 6, topY + 1.2, cz - d / 2 + 1), CLR.metal, Enum.Material.Metal)
+
+	-- 通信アンテナと赤色灯
+	makePart(model, origin, "Mast", Vector3.new(0.6, 14, 0.6), Vector3.new(cx + 5, topY + 8, cz + 3), CLR.metal, Enum.Material.Metal)
+	makePart(model, origin, "MastBeacon", Vector3.new(1.4, 1.4, 1.4), Vector3.new(cx + 5, topY + 15.5, cz + 3),
+		Color3.fromRGB(255, 40, 40), Enum.Material.Neon, { Shape = Enum.PartType.Ball })
+	makePart(model, origin, "Dish", Vector3.new(0.6, 4, 4), Vector3.new(cx - 5, topY + 3, cz + 3), white, Enum.Material.Metal,
+		{ Shape = Enum.PartType.Cylinder, CFrame = origin * CFrame.new(cx - 5, topY + 3, cz + 3) * CFrame.Angles(0, 0, math.rad(20)) })
+end
+
 --[[
 	ボタン定義 def に対応する建物を parent（Structures フォルダ）に建てる。
 	build が nil（upgrade 等）の場合は何もしない。

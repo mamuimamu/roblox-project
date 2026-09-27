@@ -10,6 +10,8 @@ local RunService        = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace         = game:GetService("Workspace")
 
+local HudLayout = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("HudLayout"))
+
 local player    = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local humanoid
@@ -28,12 +30,16 @@ vehicleGui.Name          = "VehicleGui"
 vehicleGui.ResetOnSpawn  = false
 vehicleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 vehicleGui.Parent        = playerGui
+HudLayout.applyScale(vehicleGui)  -- スマホでは画面に合わせて縮小
+
+-- スマホのジャンプボタン（右下 約 95×90px）と重ならないよう、その左側に置く
+local BUTTON_RIGHT_OFFSET = -180
 
 -- 降りるボタン
 local exitBtn = Instance.new("TextButton")
 exitBtn.Size             = UDim2.new(0, 110, 0, 50)
 exitBtn.AnchorPoint      = Vector2.new(1, 1)
-exitBtn.Position         = UDim2.new(1, -16, 1, -16)
+exitBtn.Position         = UDim2.new(1, BUTTON_RIGHT_OFFSET, 1, -16)
 exitBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 30)
 exitBtn.BorderSizePixel  = 0
 exitBtn.Font             = Enum.Font.GothamBold
@@ -52,7 +58,7 @@ exitCorner.Parent = exitBtn
 local boardBtn = Instance.new("TextButton")
 boardBtn.Size             = UDim2.new(0, 110, 0, 50)
 boardBtn.AnchorPoint      = Vector2.new(1, 1)
-boardBtn.Position         = UDim2.new(1, -16, 1, -74)
+boardBtn.Position         = UDim2.new(1, BUTTON_RIGHT_OFFSET, 1, -74)
 boardBtn.BackgroundColor3 = Color3.fromRGB(30, 140, 60)
 boardBtn.BorderSizePixel  = 0
 boardBtn.Font             = Enum.Font.GothamBold

@@ -15,6 +15,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local Shared       = ReplicatedStorage:WaitForChild("Shared")
 local TycoonConfig = require(Shared:WaitForChild("TycoonConfig"))
+local HudLayout    = require(Shared:WaitForChild("HudLayout"))
 
 local OfflineEarningsEvent = ReplicatedStorage:WaitForChild("OfflineEarningsEvent")
 local DailyRewardEvent     = ReplicatedStorage:WaitForChild("DailyRewardEvent")
@@ -28,6 +29,7 @@ screenGui.ResetOnSpawn   = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder   = 10  -- ショップより手前
 screenGui.Parent         = playerGui
+HudLayout.applyScale(screenGui)  -- スマホでは画面に合わせて縮小（ダイアログが画面に収まるように）
 
 local function addCorner(inst, radius)
 	local c = Instance.new("UICorner")
@@ -192,7 +194,7 @@ DailyClaimedEvent.OnClientEvent:Connect(function(day, amount, boostMinutes)
 	if boostMinutes then
 		text ..= ("  ⚡2倍ブースト %d分"):format(boostMinutes)
 	end
-	local label = makeLabel(screenGui, text, UDim2.new(0.5, -260, 0, 90), UDim2.new(0, 520, 0, 44), 28,
+	local label = makeLabel(screenGui, text, UDim2.new(0.5, -260, 0, 100), UDim2.new(0, 520, 0, 44), 28,
 		Color3.fromRGB(255, 215, 80), Enum.Font.GothamBlack)
 	label.TextStrokeTransparency = 0.2
 	TweenService:Create(label, TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {

@@ -11,6 +11,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local Shared     = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local HudLayout  = require(Shared:WaitForChild("HudLayout"))
 
 local WAVE_TIME_LIMIT = GameConfig.WaveTimeLimit
 
@@ -48,6 +49,7 @@ local function createScoreUI()
 	screenGui.ResetOnSpawn   = false
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	screenGui.Parent         = playerGui
+	HudLayout.applyScale(screenGui)  -- スマホでは画面に合わせて縮小
 
 	local frame = Instance.new("Frame")
 	frame.Name                  = "ScorePanel"
@@ -180,26 +182,10 @@ end
 
 -- ── 消防車ボタン ─────────────────────────────────────────────
 
+-- 左端中央の縦一列（HudLayout）の一番上に置く（左下はスマホのスティック操作の範囲のため避ける）
 local function createVehicleBtn()
-	local btn = Instance.new("TextButton")
-	btn.Name             = "VehicleBtn"
-	btn.AnchorPoint      = Vector2.new(0, 1)
-	btn.Position         = UDim2.new(0, 16, 1, -72)
-	btn.Size             = UDim2.new(0, 148, 0, 46)
-	btn.BackgroundColor3 = Color3.fromRGB(40, 160, 70)
-	btn.BorderSizePixel  = 0
-	btn.Font             = Enum.Font.Legacy
-	btn.TextSize         = 20
-	btn.TextColor3       = Color3.fromRGB(255, 255, 255)
-	btn.Text             = "🚒 呼ぶ"
-	btn.Visible          = false
-	btn.ZIndex           = 5
-	btn.Parent           = screenGui
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = btn
-
+	local btn = HudLayout.makeColumnButton("VehicleBtn", "🚒 呼ぶ", 1, Color3.fromRGB(40, 160, 70))
+	btn.Visible = false
 	return btn
 end
 
