@@ -16,7 +16,7 @@ local Shared     = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local Economy    = require(script.Parent:WaitForChild("Economy"))
 
-local FIRE_SOUND_ID       = "rbxassetid://6792293721"
+local FIRE_SOUND_ID       = "rbxassetid://516449725"  -- Creator Store の無料音源「Fire Crackling」（旧ID 6792293721 は音声ではなく読み込み失敗していた）
 local CHAR_COLOR          = Color3.fromRGB(22, 22, 22)
 local CHAR_RATE           = 1 / 90
 local UPDATE_INTERVAL     = 0.5
@@ -709,6 +709,10 @@ WaterCannonFire.OnServerEvent:Connect(function(player, camPos, direction)
 	if obstacle then return end  -- 他の建物が遮っている
 
 	local mult = activePowerups.waterBoost and 1.5 or 1.0
+	-- VIP消防車パス: 放水銃の消火力 1.5倍
+	if Economy.hasPass(player, "VIPTruck") then
+		mult *= 1.5
+	end
 	extinguishHit(burnResult.Instance, WATER_CANNON_AMOUNT * mult, player)
 end)
 

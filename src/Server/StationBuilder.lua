@@ -163,6 +163,19 @@ function StationBuilder.buildBase(parent, origin, plotSize)
 	-- テレポート先（「消防署へ」ボタン）
 	local spawnPoint = makeMarker(base, origin, "StationSpawn", Vector3.new(0, 3, -4))
 
+	-- ショップ看板（本署と放水塔のあいだ。プロンプトで Robux ショップを開く）
+	local kiosk = makePart(base, origin, "ShopKiosk", Vector3.new(6, 7, 1.5), Vector3.new(24, 3.5, -40),
+		Color3.fromRGB(215, 160, 20), Enum.Material.SmoothPlastic)
+	addSurfaceText(kiosk, Enum.NormalId.Front, "🛒 SHOP", Color3.new(1, 1, 1), Color3.fromRGB(215, 160, 20))
+	local shopPrompt = Instance.new("ProximityPrompt")
+	shopPrompt.Name                  = "ShopPrompt"
+	shopPrompt.ActionText            = "ショップを開く"
+	shopPrompt.ObjectText            = "消防署ショップ"
+	shopPrompt.HoldDuration          = 0
+	shopPrompt.MaxActivationDistance = 10
+	shopPrompt.RequiresLineOfSight   = false
+	shopPrompt.Parent                = kiosk
+
 	return {
 		folder         = base,
 		collector      = collector,
@@ -170,6 +183,7 @@ function StationBuilder.buildBase(parent, origin, plotSize)
 		collectorLabel = collectorLabel,
 		signLabel      = signLabel,
 		spawnPoint     = spawnPoint,
+		shopPrompt     = shopPrompt,
 	}
 end
 
@@ -365,6 +379,40 @@ function builders.Helipad(model, origin)
 	makePart(model, origin, "Heli_Skid_R", Vector3.new(0.4, 0.4, 8), Vector3.new(cx + 2.5, 1.2, cz + 6), CLR.metal, Enum.Material.Metal)
 end
 
+-- 消防本部タワー: 司令室（屋根の上面 Y=24）の上に3フロア積み上げる高層ビル
+function builders.HQTower(model, origin)
+	local cx, cz, w, d = 0, -31, 18, 14   -- 司令室のアンテナ（X=10）に当たらない幅
+	local y0, floorH, floors = 24, 8, 3
+	local white = Color3.fromRGB(235, 235, 235)
+	for f = 0, floors - 1 do
+		local yb = y0 + f * floorH
+		-- 床スラブ（赤いライン）と、全面ガラスのフロア
+		makePart(model, origin, "FloorBand", Vector3.new(w + 0.6, 1, d + 0.6), Vector3.new(cx, yb + 0.5, cz), CLR.brick, Enum.Material.Concrete)
+		makePart(model, origin, "FloorGlass", Vector3.new(w, floorH - 1, d), Vector3.new(cx, yb + 1 + (floorH - 1) / 2, cz),
+			CLR.glass, Enum.Material.Glass, { Transparency = 0.15 })
+		-- 四隅の柱（白）
+		for _, off in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do
+			makePart(model, origin, "Pillar", Vector3.new(1.2, floorH, 1.2),
+				Vector3.new(cx + off[1] * (w / 2), yb + floorH / 2, cz + off[2] * (d / 2)), white, Enum.Material.Concrete)
+		end
+	end
+	local topY = y0 + floors * floorH
+	makePart(model, origin, "Roof", Vector3.new(w + 1, 1.2, d + 1), Vector3.new(cx, topY + 0.6, cz), CLR.brick, Enum.Material.Concrete)
+
+	-- 屋上の看板（町側を向く）
+	local sign = makePart(model, origin, "Sign", Vector3.new(16, 3.4, 0.4), Vector3.new(cx, topY + 3, cz - d / 2 + 1), CLR.brick)
+	addSurfaceText(sign, Enum.NormalId.Front, "🚒 消防本部", CLR.trim, CLR.brick)
+	makePart(model, origin, "SignPost_L", Vector3.new(0.4, 2, 0.4), Vector3.new(cx - 6, topY + 1.2, cz - d / 2 + 1), CLR.metal, Enum.Material.Metal)
+	makePart(model, origin, "SignPost_R", Vector3.new(0.4, 2, 0.4), Vector3.new(cx + 6, topY + 1.2, cz - d / 2 + 1), CLR.metal, Enum.Material.Metal)
+
+	-- 通信アンテナと赤色灯
+	makePart(model, origin, "Mast", Vector3.new(0.6, 14, 0.6), Vector3.new(cx + 5, topY + 8, cz + 3), CLR.metal, Enum.Material.Metal)
+	makePart(model, origin, "MastBeacon", Vector3.new(1.4, 1.4, 1.4), Vector3.new(cx + 5, topY + 15.5, cz + 3),
+		Color3.fromRGB(255, 40, 40), Enum.Material.Neon, { Shape = Enum.PartType.Ball })
+	makePart(model, origin, "Dish", Vector3.new(0.6, 4, 4), Vector3.new(cx - 5, topY + 3, cz + 3), white, Enum.Material.Metal,
+		{ Shape = Enum.PartType.Cylinder, CFrame = origin * CFrame.new(cx - 5, topY + 3, cz + 3) * CFrame.Angles(0, 0, math.rad(20)) })
+end
+
 --[[
 	ボタン定義 def に対応する建物を parent（Structures フォルダ）に建てる。
 	build が nil（upgrade 等）の場合は何もしない。
@@ -450,11 +498,12 @@ local Players = game:GetService("Players")
 
 --[[
 	消防隊員の NPC（R15）を作る。紺の防火服＋黄色いヘルメット。
+	elite = true のときは精鋭隊員（ゲームパス）: 金色ヘルメット＋オレンジの防火服。
 	spawnPos: 区画ローカル座標。戻り値は Model（Humanoid 付き）、失敗時 nil。
 ]]
-function StationBuilder.buildCrew(parent, origin, index, spawnPos)
+function StationBuilder.buildCrew(parent, origin, index, spawnPos, elite)
 	local desc = Instance.new("HumanoidDescription")
-	local navy = Color3.fromRGB(30, 40, 70)
+	local navy = elite and Color3.fromRGB(200, 90, 20) or Color3.fromRGB(30, 40, 70)
 	local skin = Color3.fromRGB(234, 184, 146)
 	desc.HeadColor     = skin
 	desc.LeftArmColor  = navy
@@ -472,12 +521,12 @@ function StationBuilder.buildCrew(parent, origin, index, spawnPos)
 		return nil
 	end
 
-	model.Name = "Crew_" .. index
+	model.Name = (elite and "EliteCrew_" or "Crew_") .. index
 	local hum  = model:FindFirstChildOfClass("Humanoid")
 	local head = model:FindFirstChild("Head")
 	local root = model:FindFirstChild("HumanoidRootPart")
 	if hum then
-		hum.DisplayName          = "隊員" .. index
+		hum.DisplayName          = elite and "⭐精鋭隊員" or ("隊員" .. index)
 		hum.WalkSpeed            = 8
 		hum.DisplayDistanceType  = Enum.HumanoidDisplayDistanceType.Viewer
 		hum.NameDisplayDistance  = 40
@@ -489,8 +538,8 @@ function StationBuilder.buildCrew(parent, origin, index, spawnPos)
 		helmet.Name       = "Helmet"
 		helmet.Shape      = Enum.PartType.Ball
 		helmet.Size       = Vector3.new(1.5, 1.5, 1.5)
-		helmet.Color      = Color3.fromRGB(255, 205, 40)
-		helmet.Material   = Enum.Material.SmoothPlastic
+		helmet.Color      = elite and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(255, 205, 40)
+		helmet.Material   = elite and Enum.Material.Foil or Enum.Material.SmoothPlastic
 		helmet.CanCollide = false
 		helmet.Massless   = true
 		helmet.CFrame     = head.CFrame * CFrame.new(0, 0.35, 0)

@@ -3,9 +3,13 @@
 	右下にミニマップを表示し、火災位置とプレイヤー位置をリアルタイムで示す。
 ]]
 
-local Players    = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Workspace  = game:GetService("Workspace")
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
+
+local HudLayout = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("HudLayout"))
 
 local player    = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -21,13 +25,17 @@ screenGui.Name           = "MinimapGui"
 screenGui.ResetOnSpawn   = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent         = playerGui
+HudLayout.applyScale(screenGui)  -- スマホでは画面に合わせて縮小
+
+-- スマホは右下にジャンプボタンがあるので、その上まで持ち上げる
+local MAP_BOTTOM_OFFSET = UserInputService.TouchEnabled and -170 or -80
 
 -- 外枠
 local mapFrame = Instance.new("Frame")
 mapFrame.Name                  = "MapFrame"
 mapFrame.Size                  = UDim2.new(0, UI_SIZE, 0, UI_SIZE)
 mapFrame.AnchorPoint           = Vector2.new(1, 1)
-mapFrame.Position              = UDim2.new(1, -16, 1, -80)
+mapFrame.Position              = UDim2.new(1, -16, 1, MAP_BOTTOM_OFFSET)
 mapFrame.BackgroundColor3      = Color3.fromRGB(15, 20, 15)
 mapFrame.BackgroundTransparency = 0.3
 mapFrame.BorderSizePixel       = 0

@@ -3,7 +3,7 @@
 	タイクーンの倍率・容量・報酬の計算を一か所に集約する。
 	TycoonManager（収入）と BurningHouseManager（消火報酬・消火力・制限時間）の両方から使う。
 
-	Phase 4（ゲームパス・ブースト）/ Phase 5（Premium）の倍率も getMultiplier に追加していく。
+	倍率の構成: ランク × (1 + 建物 + 隊員 + Premium) × ゲームパス(マネー2倍) × ブースト(2倍)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,6 +12,24 @@ local TycoonConfig   = require(ReplicatedStorage:WaitForChild("Shared"):WaitForC
 local PlayerProfiles = require(script.Parent:WaitForChild("PlayerProfiles"))
 
 local Economy = {}
+
+local ELITE_CREW_COUNT = 3  -- 「精鋭隊員3人」ゲームパスで常駐する人数
+
+-- ゲームパス所持（MonetizationManager が player の Attribute に反映する）
+function Economy.hasPass(player, key)
+	return player ~= nil and player:GetAttribute("Pass_" .. key) == true
+end
+
+-- 収入2倍ブーストが有効か（BoostUntil は os.time() 基準の終了時刻）
+function Economy.isBoostActive(player)
+	local profile = player and PlayerProfiles.get(player)
+	return profile ~= nil and (profile.BoostUntil or 0) > os.time()
+end
+
+-- Roblox Premium 会員か
+function Economy.isPremium(player)
+	return player ~= nil and player.MembershipType == Enum.MembershipType.Premium
+end
 
 -- 所持ボタン定義を順に返すイテレータ（プロフィール未ロードなら何も返さない）
 local function ownedDefs(player)
@@ -40,14 +58,25 @@ function Economy.owns(player, buttonId)
 	return profile ~= nil and profile.OwnedButtons[buttonId] == true
 end
 
--- 雇っている隊員の人数
-function Economy.getCrewCount(player)
+-- 雇っている隊員の人数（ボタンで雇った人数）
+function Economy.getHiredCrewCount(player)
 	local n = 0
 	for _, def in ownedDefs(player) do
 		if def.kind == "crew" then n += 1 end
 	end
 	return n
 end
+
+-- 収入・消火支援に効く隊員の総数（雇用 + 精鋭隊員パス）
+function Economy.getCrewCount(player)
+	local n = Economy.getHiredCrewCount(player)
+	if Economy.hasPass(player, "EliteCrew") then
+		n += ELITE_CREW_COUNT
+	end
+	return n
+end
+
+Economy.ELITE_CREW_COUNT = ELITE_CREW_COUNT
 
 --[[
 	収入倍率 = ランク倍率 × (1 + 建物ボーナス + 隊員ボーナス)
@@ -60,8 +89,26 @@ function Economy.getMultiplier(player)
 
 	local bonus = sumField(player, "incomeBonus")
 		+ Economy.getCrewCount(player) * TycoonConfig.CrewIncomeBonus
+	-- Roblox Premium 会員ボーナス
+	if Economy.isPremium(player) then
+		bonus += TycoonConfig.PremiumBonus
+	end
 
-	return rankDef.mult * (1 + bonus)
+	local mult = rankDef.mult * (1 + bonus)
+	if Economy.hasPass(player, "DoubleMoney") then mult *= 2 end
+	if Economy.isBoostActive(player) then mult *= 2 end
+	return mult
+end
+
+-- 通報センターによる秒間収入（倍率込み）。資金パックの付与額計算などに使う
+function Economy.getIncomePerSecond(player)
+	local ips = 0
+	for _, def in ownedDefs(player) do
+		if def.kind == "dropper" then
+			ips += def.value / def.interval
+		end
+	end
+	return ips * Economy.getMultiplier(player)
 end
 
 -- 回収ボックスの容量

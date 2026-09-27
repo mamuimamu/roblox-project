@@ -1,12 +1,13 @@
 --[[
 	TycoonUIController（Client / LocalScript）
 	消防署タイクーンのクライアント表示。
-	  ・所持金 HUD（左下、スコアパネルの上）とランク表示
-	  ・「消防署へ」「町へ」テレポートボタン
+	  ・所持金 HUD（上部中央）とランク表示
+	  ・「消防署へ」「町へ」テレポートボタン（左端中央の縦一列 = HudLayout）
 	  ・購入パッドの価格表示を「買える＝緑／買えない＝赤」に色分け
 	  ・出動レーンを走るミニ消防車の演出（サーバーの TycoonDropEvent を受けて再生）
 	  ・回収額／購入結果／消火報酬のポップアップ
 	  ・隊員の消火支援の水しぶき演出（CrewSupportEvent）
+	  ・ランク昇格ボタンと確認ダイアログ（TycoonRankUpEvent）
 ]]
 
 local Players           = game:GetService("Players")
@@ -19,12 +20,14 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local Shared       = ReplicatedStorage:WaitForChild("Shared")
 local TycoonConfig = require(Shared:WaitForChild("TycoonConfig"))
+local HudLayout    = require(Shared:WaitForChild("HudLayout"))
 
 local TycoonDropEvent     = ReplicatedStorage:WaitForChild("TycoonDropEvent")
 local TycoonCollectEvent  = ReplicatedStorage:WaitForChild("TycoonCollectEvent")
 local TycoonPurchaseEvent = ReplicatedStorage:WaitForChild("TycoonPurchaseEvent")
 local TycoonTeleportEvent = ReplicatedStorage:WaitForChild("TycoonTeleportEvent")
 local CrewSupportEvent    = ReplicatedStorage:WaitForChild("CrewSupportEvent")
+local TycoonRankUpEvent   = ReplicatedStorage:WaitForChild("TycoonRankUpEvent")
 
 local leaderstats = player:WaitForChild("leaderstats")
 local moneyValue  = leaderstats:WaitForChild("Money")
@@ -40,12 +43,13 @@ screenGui.Name           = "TycoonUI"
 screenGui.ResetOnSpawn   = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent         = playerGui
+HudLayout.applyScale(screenGui)  -- スマホでは画面に合わせて縮小
 
--- 角丸の半透明パネルを作る
+-- 角丸の半透明パネルを作る（上部中央に置く）
 local function makePanel(name, position, size)
 	local frame = Instance.new("Frame")
 	frame.Name                   = name
-	frame.AnchorPoint            = Vector2.new(0, 1)
+	frame.AnchorPoint            = Vector2.new(0.5, 0)
 	frame.Position               = position
 	frame.Size                   = size
 	frame.BackgroundColor3       = Color3.fromRGB(0, 0, 0)
@@ -59,8 +63,8 @@ local function makePanel(name, position, size)
 	return frame
 end
 
--- 所持金パネル（ScoreUI のスコアパネルと「🚒 呼ぶ」ボタンの上に置く）
-local moneyPanel = makePanel("MoneyPanel", UDim2.new(0, 16, 1, -126), UDim2.new(0, 200, 0, 52))
+-- 所持金パネル（上部中央。左上はウェーブパネル、左端はボタン列なので空いている上中央に置く）
+local moneyPanel = makePanel("MoneyPanel", UDim2.new(0.5, 0, 0, 8), UDim2.new(0, 270, 0, 52))
 
 local moneyLabel = Instance.new("TextLabel")
 moneyLabel.Name                   = "MoneyLabel"
@@ -70,7 +74,7 @@ moneyLabel.BackgroundTransparency = 1
 moneyLabel.Font                   = Enum.Font.GothamBlack
 moneyLabel.TextSize               = 24
 moneyLabel.TextColor3             = Color3.fromRGB(120, 255, 140)
-moneyLabel.TextXAlignment         = Enum.TextXAlignment.Left
+moneyLabel.TextXAlignment         = Enum.TextXAlignment.Center
 moneyLabel.Text                   = "💵 $0"
 moneyLabel.Parent                 = moneyPanel
 
@@ -80,39 +84,25 @@ rankLabel.Position               = UDim2.new(0, 12, 0, 30)
 rankLabel.Size                   = UDim2.new(1, -24, 0, 18)
 rankLabel.BackgroundTransparency = 1
 rankLabel.Font                   = Enum.Font.GothamBold
-rankLabel.TextSize               = 14
+rankLabel.TextSize               = 13
 rankLabel.TextColor3             = Color3.fromRGB(220, 220, 220)
-rankLabel.TextXAlignment         = Enum.TextXAlignment.Left
+rankLabel.TextXAlignment         = Enum.TextXAlignment.Center
 rankLabel.Parent                 = moneyPanel
 
--- テレポートボタン
-local function makeTeleportButton(name, text, xOffset, destination)
-	local btn = Instance.new("TextButton")
-	btn.Name                   = name
-	btn.AnchorPoint            = Vector2.new(0, 1)
-	btn.Position               = UDim2.new(0, xOffset, 1, -126)
-	btn.Size                   = UDim2.new(0, 110, 0, 52)
-	btn.BackgroundColor3       = Color3.fromRGB(190, 40, 35)
-	btn.BackgroundTransparency = 0.1
-	btn.BorderSizePixel        = 0
-	btn.Font                   = Enum.Font.GothamBold
-	btn.TextSize               = 16
-	btn.TextColor3             = Color3.new(1, 1, 1)
-	btn.Text                   = text
-	btn.Parent                 = screenGui
+-- 縦一列のボタン（order: 並び順。1 = 呼ぶ(ScoreUI), 5 = ショップ(ShopUI)）
+local function makeTeleportButton(name, text, order, destination)
+	local btn = HudLayout.makeColumnButton(name, text, order, Color3.fromRGB(190, 40, 35))
 
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent       = btn
-
-	btn.Activated:Connect(function()
-		TycoonTeleportEvent:FireServer(destination)
-	end)
+	if destination then
+		btn.Activated:Connect(function()
+			TycoonTeleportEvent:FireServer(destination)
+		end)
+	end
 	return btn
 end
 
-makeTeleportButton("ToStationButton", "🚒 消防署へ", 224, "station")
-local toTownBtn = makeTeleportButton("ToTownButton", "🏙 町へ", 342, "town")
+makeTeleportButton("ToStationButton", "🏠 消防署へ", 2, "station")
+local toTownBtn = makeTeleportButton("ToTownButton", "🏙 町へ", 3, "town")
 toTownBtn.BackgroundColor3 = Color3.fromRGB(50, 90, 160)
 
 local function updateMoney()
@@ -132,6 +122,142 @@ updateRank()
 rankValue.Changed:Connect(updateRank)
 player:GetAttributeChangedSignal("IncomeMult"):Connect(updateRank)
 player:GetAttributeChangedSignal("CrewCount"):Connect(updateRank)
+
+-- ── ランク昇格 ───────────────────────────────────────────────
+
+local rankUpBtn = makeTeleportButton("RankUpButton", "🏅 昇格", 4, nil)
+rankUpBtn.BackgroundColor3 = Color3.fromRGB(90, 90, 90)
+
+local rankDialog = nil  -- 確認ダイアログ（開いている間 non-nil）
+
+local function closeRankDialog()
+	if rankDialog then
+		rankDialog:Destroy()
+		rankDialog = nil
+	end
+end
+
+-- 昇格ボタンの色: 昇格できる額に届いたら金色に光らせる
+local function updateRankUpButton()
+	local nextDef = TycoonConfig.Ranks[rankValue.Value + 1]
+	if not nextDef then
+		rankUpBtn.Text             = "🏅 最高ランク"
+		rankUpBtn.BackgroundColor3 = Color3.fromRGB(90, 90, 90)
+	elseif moneyValue.Value >= nextDef.cost then
+		rankUpBtn.Text             = "🏅 昇格できる！"
+		rankUpBtn.BackgroundColor3 = Color3.fromRGB(215, 160, 20)
+	else
+		rankUpBtn.Text             = "🏅 昇格"
+		rankUpBtn.BackgroundColor3 = Color3.fromRGB(90, 90, 90)
+	end
+end
+
+-- ダイアログ内のテキスト行を作る
+local function dialogText(parent, text, y, height, size, color, font)
+	local label = Instance.new("TextLabel")
+	label.Position               = UDim2.new(0, 20, 0, y)
+	label.Size                   = UDim2.new(1, -40, 0, height)
+	label.BackgroundTransparency = 1
+	label.Font                   = font or Enum.Font.GothamBold
+	label.TextSize               = size
+	label.TextColor3             = color or Color3.new(1, 1, 1)
+	label.TextWrapped            = true
+	label.Text                   = text
+	label.Parent                 = parent
+	return label
+end
+
+local function dialogButton(parent, text, xScale, color, onClick)
+	local btn = Instance.new("TextButton")
+	btn.AnchorPoint      = Vector2.new(0.5, 1)
+	btn.Position         = UDim2.new(xScale, 0, 1, -16)
+	btn.Size             = UDim2.new(0.4, 0, 0, 44)
+	btn.BackgroundColor3 = color
+	btn.BorderSizePixel  = 0
+	btn.Font             = Enum.Font.GothamBold
+	btn.TextSize         = 18
+	btn.TextColor3       = Color3.new(1, 1, 1)
+	btn.Text             = text
+	btn.Parent           = parent
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent       = btn
+	btn.Activated:Connect(onClick)
+	return btn
+end
+
+local function openRankDialog()
+	closeRankDialog()
+	local curDef  = TycoonConfig.Ranks[rankValue.Value] or TycoonConfig.Ranks[1]
+	local nextDef = TycoonConfig.Ranks[rankValue.Value + 1]
+
+	local panel = Instance.new("Frame")
+	panel.Name             = "RankUpDialog"
+	panel.AnchorPoint      = Vector2.new(0.5, 0.5)
+	panel.Position         = UDim2.fromScale(0.5, 0.5)
+	panel.Size             = UDim2.new(0, 380, 0, 330)
+	panel.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+	panel.BorderSizePixel  = 0
+	panel.ZIndex           = 10
+	panel.Parent           = screenGui
+	rankDialog = panel
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 12)
+	corner.Parent       = panel
+	local stroke = Instance.new("UIStroke")
+	stroke.Color     = Color3.fromRGB(215, 160, 20)
+	stroke.Thickness = 2
+	stroke.Parent    = panel
+
+	dialogText(panel, "🏅 ランク昇格", 14, 34, 26, Color3.fromRGB(255, 215, 80), Enum.Font.GothamBlack)
+
+	if not nextDef then
+		dialogText(panel, "最高ランク「" .. curDef.name .. "」に到達しています！", 80, 60, 18)
+		dialogButton(panel, "閉じる", 0.5, Color3.fromRGB(90, 90, 90), closeRankDialog)
+		return
+	end
+
+	dialogText(panel, ("%s（×%s）  →  %s（×%s）"):format(curDef.name, tostring(curDef.mult), nextDef.name, tostring(nextDef.mult)),
+		56, 26, 18, Color3.fromRGB(120, 255, 140))
+
+	-- 必要額と進捗バー
+	local have  = moneyValue.Value
+	local ratio = math.clamp(have / nextDef.cost, 0, 1)
+	dialogText(panel, ("必要額 %s ／ 所持 %s"):format(TycoonConfig.formatMoney(nextDef.cost), TycoonConfig.formatMoney(have)),
+		88, 22, 16, Color3.fromRGB(220, 220, 220), Enum.Font.Gotham)
+	local barBg = Instance.new("Frame")
+	barBg.Position         = UDim2.new(0, 20, 0, 114)
+	barBg.Size             = UDim2.new(1, -40, 0, 14)
+	barBg.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+	barBg.BorderSizePixel  = 0
+	barBg.Parent           = panel
+	local bar = Instance.new("Frame")
+	bar.Size             = UDim2.new(ratio, 0, 1, 0)
+	bar.BackgroundColor3 = Color3.fromRGB(215, 160, 20)
+	bar.BorderSizePixel  = 0
+	bar.Parent           = barBg
+
+	dialogText(panel, "⚠ リセット: 所持金・建物・隊員・回収ボックス", 140, 40, 15, Color3.fromRGB(255, 130, 130), Enum.Font.Gotham)
+	dialogText(panel, "✅ 維持: 収入倍率（永続）・消防車・ウェーブ・ポイント", 180, 40, 15, Color3.fromRGB(150, 220, 255), Enum.Font.Gotham)
+
+	local canRankUp = have >= nextDef.cost
+	local okBtn = dialogButton(panel, canRankUp and "昇格する" or "お金が足りません", 0.27,
+		canRankUp and Color3.fromRGB(200, 140, 10) or Color3.fromRGB(70, 70, 70), function()
+			if not canRankUp then return end
+			TycoonRankUpEvent:FireServer()
+			closeRankDialog()
+		end)
+	okBtn.AutoButtonColor = canRankUp
+	dialogButton(panel, "やめる", 0.73, Color3.fromRGB(90, 90, 90), closeRankDialog)
+end
+
+rankUpBtn.Activated:Connect(function()
+	if rankDialog then closeRankDialog() else openRankDialog() end
+end)
+
+updateRankUpButton()
+rankValue.Changed:Connect(updateRankUpButton)
 
 -- ── 購入パッドの色分け ───────────────────────────────────────
 
@@ -169,6 +295,7 @@ tycoons.DescendantAdded:Connect(trackPad)
 
 moneyValue.Changed:Connect(function()
 	updateMoney()
+	updateRankUpButton()
 	for pad in pairs(trackedPads) do
 		colorPad(pad)
 	end
@@ -295,6 +422,15 @@ end)
 
 TycoonCollectEvent.OnClientEvent:Connect(function(amount)
 	popup("+" .. TycoonConfig.formatMoney(amount), Color3.fromRGB(120, 255, 140))
+end)
+
+TycoonRankUpEvent.OnClientEvent:Connect(function(ok, newRank, reason)
+	if ok then
+		local def = TycoonConfig.Ranks[newRank] or TycoonConfig.Ranks[1]
+		popup(("🎉 %s に昇格！ 収入×%s"):format(def.name, tostring(def.mult)), Color3.fromRGB(255, 215, 80))
+	else
+		popup("❌ " .. (reason or "昇格できません"), COLOR_NO_MONEY)
+	end
 end)
 
 TycoonPurchaseEvent.OnClientEvent:Connect(function(ok, buttonName, reason)
